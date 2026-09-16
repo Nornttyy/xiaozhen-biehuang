@@ -1,5 +1,5 @@
 {
-  "description": "《小镇别慌》横屏五路塔防原型",
+  "description": "《小镇别慌》横屏五路回合制卡牌守镇原型",
   "setting": {
     "urlCheck": false,
     "es6": true,
@@ -9,6 +9,6 @@
   "compileType": "game",
   "libVersion": "latest",
   "appid": "touristappid",
-  "projectname": "xiaozhen-biehuang-tower-defense",
+  "projectname": "xiaozhen-biehuang-turn-defense",
   "simulatorType": "wechat"
 }

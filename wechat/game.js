@@ -177,37 +177,37 @@ const FORM_RECIPES = Object.freeze({
   },
 });
 
-const WAVE_POINTS = Object.freeze([20, 24, 28, 32, 36, 42]);
-const WAVE_DURATION = 35;
+const TURN_SECONDS = 1.25;
+const RAGE_TURN = 28;
 
 const WAVE_SPECS = Object.freeze([
   [
-    [0.0, "slime", 1], [3.0, "slime", 3], [6.0, "slime", 1],
-    [9.0, "slime", 3], [12.0, "slime", 1], [15.0, "slime", 3],
+    [0, "slime", 1], [0, "slime", 3], [2, "slime", 1],
+    [3, "slime", 3], [4, "slime", 1], [5, "slime", 3],
   ],
   [
-    [0.0, "slime", 0], [2.0, "bat", 4], [4.0, "slime", 2], [6.0, "bat", 1],
-    [8.0, "slime", 3], [10.5, "bat", 0], [13.0, "mushroom", 2], [16.0, "slime", 4],
+    [0, "slime", 0], [0, "bat", 4], [1, "slime", 2], [2, "bat", 1],
+    [3, "slime", 3], [4, "bat", 0], [5, "mushroom", 2], [6, "slime", 4],
   ],
   [
-    [0.0, "slime", 1], [1.8, "bat", 4], [3.6, "slime", 2], [5.4, "bat", 0],
-    [7.4, "mushroom", 3], [9.5, "slime", 0], [11.7, "slime", 4], [14.0, "brute", 2],
-    [17.0, "mushroom", 1],
+    [0, "slime", 1], [0, "bat", 4], [1, "slime", 2], [2, "bat", 0],
+    [3, "mushroom", 3], [4, "slime", 0], [5, "slime", 4], [6, "brute", 2],
+    [7, "mushroom", 1],
   ],
   [
-    [0.0, "brute", 2], [1.7, "slime", 4], [3.4, "mushroom", 0], [5.1, "bat", 3],
-    [6.8, "slime", 1], [8.5, "mushroom", 4], [10.2, "bat", 0], [12.0, "mushroom", 2],
-    [14.2, "mushroom", 1], [17.0, "brute", 3],
+    [0, "brute", 2], [0, "slime", 4], [1, "mushroom", 0], [2, "bat", 3],
+    [3, "slime", 1], [4, "mushroom", 4], [5, "bat", 0], [6, "mushroom", 2],
+    [7, "mushroom", 1], [8, "brute", 3],
   ],
   [
-    [0.0, "brute", 0], [1.6, "brute", 4], [3.2, "mushroom", 1], [4.8, "mushroom", 3],
-    [6.4, "bat", 0], [8.0, "bat", 4], [9.6, "slime", 1], [11.2, "slime", 2],
-    [12.8, "mushroom", 0], [14.4, "mushroom", 4], [17.0, "brute", 2],
+    [0, "brute", 0], [0, "brute", 4], [1, "mushroom", 1], [2, "mushroom", 3],
+    [3, "bat", 0], [4, "bat", 4], [5, "slime", 1], [6, "slime", 2],
+    [7, "mushroom", 0], [8, "mushroom", 4], [9, "brute", 2],
   ],
   [
-    [0.0, "boss", 2], [1.8, "bat", 0], [3.6, "bat", 4], [5.4, "mushroom", 1],
-    [7.2, "mushroom", 3], [9.0, "brute", 0], [11.0, "brute", 4], [13.0, "bat", 1],
-    [15.0, "bat", 3], [17.0, "mushroom", 2], [20.0, "brute", 2],
+    [0, "boss", 2], [0, "bat", 0], [0, "bat", 4], [1, "mushroom", 1],
+    [2, "mushroom", 3], [3, "brute", 0], [4, "brute", 4], [5, "bat", 1],
+    [6, "bat", 3], [7, "mushroom", 2], [8, "brute", 2],
   ],
 ]);
 
@@ -247,7 +247,7 @@ function cardRect(index) {
 
 function freshState(seed = 0x51a7c3) {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     phase: "ready",
     previousPhase: "ready",
     battleTime: 0,
@@ -261,7 +261,7 @@ function freshState(seed = 0x51a7c3) {
     units: [],
     enemies: [],
     effects: [],
-    wave: { index: -1, elapsed: 0, duration: WAVE_DURATION, nextSpawnIndex: 0, intermission: 0 },
+    wave: { index: -1, turn: 0, elapsed: 0, nextSpawnIndex: 0, intermission: 0 },
     rngSeed: seed >>> 0,
     nextEntityId: 1,
     message: null,
@@ -293,7 +293,15 @@ class TowerDefenseGame {
       state.phase = state.previousPhase === "paused" ? "playing" : state.previousPhase;
       return;
     }
-    if (state.phase === "ready") this.startWave(0);
+    if (state.phase === "ready") {
+      this.startWave(0);
+      return;
+    }
+    if (state.phase === "intermission") {
+      this.startWave(state.wave.index + 1);
+      return;
+    }
+    if (state.phase === "playing") this.advanceTurn();
   }
 
   togglePause() {
@@ -314,45 +322,50 @@ class TowerDefenseGame {
   startWave(index) {
     const state = this.state;
     state.wave.index = index;
+    state.wave.turn = 0;
     state.wave.elapsed = 0;
     state.wave.nextSpawnIndex = 0;
     state.wave.intermission = 0;
-    state.wave.duration = WAVE_DURATION;
-    if (index > 0) state.resource = Math.min(state.resourceMax, Math.max(state.resource, WAVE_POINTS[index]));
     state.phase = "playing";
     state.units.forEach((unit) => {
       unit.hp = Math.min(unit.maxHp, unit.hp + unit.maxHp * 0.24);
       unit.targetId = null;
     });
+    this.spawnForTurn(0);
     this.addEffect({ type: "banner", text: `${index + 1} / ${WAVE_SPECS.length}`, ttl: 1.2 });
   }
 
   update(dt) {
-    const state = this.state;
     dt = clamp(dt, 0, 0.05);
     this.updateUiTimers(dt);
-    if (!['playing', 'intermission'].includes(state.phase)) return;
+  }
 
-    state.battleTime += dt;
-    state.resourceClock += dt;
-    while (state.resourceClock >= 3) {
-      state.resourceClock -= 3;
-      state.resource = Math.min(state.resourceMax, state.resource + 1);
-    }
-    state.deck.forEach((slot) => { slot.cooldownLeft = Math.max(0, slot.cooldownLeft - dt); });
+  advanceTurn() {
+    const state = this.state;
+    if (state.phase !== "playing") return false;
 
-    if (state.phase === "intermission") {
-      state.wave.intermission -= dt;
-      this.updateStatuses(dt);
-      if (state.wave.intermission <= 0) this.startWave(state.wave.index + 1);
-      return;
-    }
-
-    this.updateSpawns(dt);
-    this.updateStatuses(dt);
-    this.updateActors(dt);
-    this.cleanupActors();
+    state.wave.turn += 1;
+    state.resource = Math.min(state.resourceMax, state.resource + 2);
+    state.deck.forEach((slot) => {
+      slot.cooldownLeft = Math.max(0, slot.cooldownLeft - 1);
+    });
+    this.spawnForTurn(state.wave.turn);
+    this.simulateTurn(TURN_SECONDS);
     this.checkWaveEnd();
+    return true;
+  }
+
+  simulateTurn(seconds = TURN_SECONDS) {
+    let remaining = seconds;
+    while (remaining > 0 && this.state.phase === "playing") {
+      const step = Math.min(0.05, remaining);
+      remaining -= step;
+      this.state.battleTime += step;
+      this.state.wave.elapsed += step;
+      this.updateStatuses(step);
+      this.updateActors(step);
+      this.cleanupActors();
+    }
   }
 
   updateUiTimers(dt) {
@@ -362,17 +375,24 @@ class TowerDefenseGame {
     if (state.messageTtl === 0) state.message = null;
     state.effects.forEach((effect) => { effect.ttl -= dt; });
     state.effects = state.effects.filter((effect) => effect.ttl > 0);
+    [...state.units, ...state.enemies].forEach((actor) => {
+      actor.actionTtl = Math.max(0, (actor.actionTtl || 0) - dt);
+      if (actor.actionTtl === 0) actor.action = null;
+    });
   }
 
-  updateSpawns(dt) {
+  spawnForTurn(turn) {
     const state = this.state;
     const spec = WAVE_SPECS[state.wave.index];
-    state.wave.elapsed += dt;
-    while (state.wave.nextSpawnIndex < spec.length && spec[state.wave.nextSpawnIndex][0] <= state.wave.elapsed) {
+    while (state.wave.nextSpawnIndex < spec.length && spec[state.wave.nextSpawnIndex][0] <= turn) {
       const [, type, row] = spec[state.wave.nextSpawnIndex];
       this.spawnMonster(type, row, state.wave.index);
       state.wave.nextSpawnIndex += 1;
     }
+  }
+
+  updateSpawns() {
+    this.spawnForTurn(this.state.wave.turn);
   }
 
   spawnMonster(type, row, waveIndex) {
@@ -406,6 +426,8 @@ class TowerDefenseGame {
       attackTimer: this.random() * 0.35,
       targetId: null,
       blockedById: null,
+      action: null,
+      actionTtl: 0,
       statuses: {},
       hitFlash: 0,
     };
@@ -593,6 +615,8 @@ class TowerDefenseGame {
   performAttack(attacker, target) {
     const isRanged = attacker.range > 90;
     const attackPower = this.getAttackPower(attacker);
+    attacker.action = "attack";
+    attacker.actionTtl = 0.32;
     this.damage(target, attackPower, attacker);
     this.addEffect({
       type: isRanged ? "shot" : "slash",
@@ -651,8 +675,8 @@ class TowerDefenseGame {
 
   getAttackPower(attacker) {
     if (attacker.side !== "enemy") return attacker.attack;
-    const overtime = Math.max(0, this.state.wave.elapsed - WAVE_DURATION);
-    return attacker.attack * (1 + overtime / 20);
+    const overtimeTurns = Math.max(0, this.state.wave.turn - RAGE_TURN);
+    return attacker.attack * (1 + overtimeTurns / 16);
   }
 
   isSecondaryTargetAllowed(attacker, target) {
@@ -668,9 +692,14 @@ class TowerDefenseGame {
     }
     if (target.hp <= 0) {
       target.hp = 0;
+      target.action = "down";
+      target.actionTtl = 0.7;
       source.targetId = null;
       if (source.blockedById === target.id) source.blockedById = null;
       this.addEffect({ type: "down", x: target.x, y: target.y, color: target.color, ttl: 0.5 });
+    } else {
+      target.action = "hit";
+      target.actionTtl = 0.18;
     }
   }
 
@@ -693,15 +722,16 @@ class TowerDefenseGame {
       this.addEffect({ type: "banner", text: "完成", ttl: 3 });
     } else {
       this.state.phase = "intermission";
-      this.state.wave.intermission = 3.5;
-      this.addEffect({ type: "banner", text: `${WAVE_POINTS[this.state.wave.index + 1]}`, ttl: 1 });
+      this.state.wave.intermission = 0;
+      this.addEffect({ type: "banner", text: "▶", ttl: 1 });
     }
   }
 
   handleTap(x, y) {
-    if (this.state.phase === "ready" && !this.state.selectedCardId && inRect(x, y, UI.readyStart)) {
+    if (["ready", "intermission"].includes(this.state.phase) && !this.state.selectedCardId && inRect(x, y, UI.readyStart)) {
+      const wasReady = this.state.phase === "ready";
       this.begin();
-      return { type: "start" };
+      return { type: wasReady ? "start" : "next-wave" };
     }
 
     for (const button of UI.controls) {
@@ -764,6 +794,8 @@ class TowerDefenseGame {
       blockCapacity: def.block || 1,
       attackTimer: 0.2,
       targetId: null,
+      action: null,
+      actionTtl: 0,
       statuses: {},
       hitFlash: 0,
       elements: [],
@@ -853,8 +885,11 @@ class TowerDefenseGame {
   }
 
   serialize() {
+    const withoutAction = ({ action: _action, actionTtl: _actionTtl, ...actor }) => actor;
     return JSON.stringify({
       ...this.state,
+      units: this.state.units.map(withoutAction),
+      enemies: this.state.enemies.map(withoutAction),
       effects: [],
       selectedCardId: null,
       savedAt: Date.now(),
@@ -864,13 +899,18 @@ class TowerDefenseGame {
   restore(serialized) {
     try {
       const saved = typeof serialized === "string" ? JSON.parse(serialized) : serialized;
-      if (!saved || saved.schemaVersion !== 2) return false;
+      if (!saved || saved.schemaVersion !== 3) return false;
       const next = freshState(saved.rngSeed);
       Object.assign(next, saved);
       next.effects = [];
       next.selectedCardId = null;
       next.phase = saved.phase === "paused" ? saved.previousPhase || "ready" : saved.phase;
       next.previousPhase = next.phase;
+      next.wave = {
+        ...freshState(saved.rngSeed).wave,
+        ...(saved.wave || {}),
+        turn: Math.max(0, Math.floor(saved.wave?.turn || 0)),
+      };
       next.deck = CARD_DEFS.map((card) => {
         const slot = saved.deck?.find((item) => item.cardId === card.id);
         return { cardId: card.id, cooldownLeft: Math.max(0, slot?.cooldownLeft || 0), flash: 0 };
@@ -887,12 +927,14 @@ class TowerDefenseGame {
           lane,
           cellCol,
           blockCapacity: ROLE_DEFS[unit.roleId].block || 1,
+          action: null,
+          actionTtl: 0,
         };
       });
       next.enemies = (saved.enemies || []).filter((enemy) => MONSTER_DEFS[enemy.monsterId]).map((enemy) => {
         const fallbackLane = pointToCell(enemy.x, enemy.y)?.row || 0;
         const lane = clamp(Number.isInteger(enemy.lane) ? enemy.lane : fallbackLane, 0, BOARD.rows - 1);
-        return { ...enemy, lane, y: cellCenter(lane, 0).y };
+        return { ...enemy, lane, y: cellCenter(lane, 0).y, action: null, actionTtl: 0 };
       });
       this.state = next;
       return true;
@@ -909,7 +951,90 @@ class TowerDefenseGame {
 const WAVE_COUNT = WAVE_SPECS.length;
 const FORM_NAMES = Object.freeze(Object.fromEntries(Object.entries(FORM_RECIPES).map(([key, value]) => [key, value.name])));
 
-Object.assign(exports, { LOGICAL_WIDTH, LOGICAL_HEIGHT, BOARD, UI, ELEMENTS, ROLE_DEFS, MONSTER_DEFS, CARD_DEFS, WAVE_POINTS, WAVE_DURATION, cellCenter, pointToCell, cardRect, TowerDefenseGame, WAVE_COUNT, FORM_NAMES });
+Object.assign(exports, { LOGICAL_WIDTH, LOGICAL_HEIGHT, BOARD, UI, ELEMENTS, ROLE_DEFS, MONSTER_DEFS, CARD_DEFS, TURN_SECONDS, RAGE_TURN, cellCenter, pointToCell, cardRect, TowerDefenseGame, WAVE_COUNT, FORM_NAMES });
+});
+
+__define("skeletal-assets", function (exports, __require) {
+const RANGER_PARTS = Object.freeze([
+  "arm_front_lower",
+  "arm_front_upper",
+  "arm_rear_lower",
+  "arm_rear_upper",
+  "arrow_fx",
+  "bow",
+  "cape",
+  "hair_back",
+  "hair_front",
+  "head",
+  "leg_front_lower",
+  "leg_front_upper",
+  "leg_rear_lower",
+  "leg_rear_upper",
+  "quiver",
+  "torso",
+]);
+
+const SLIME_PARTS = Object.freeze([
+  "arm_left",
+  "arm_right",
+  "body",
+  "core",
+  "face",
+  "horn_left",
+  "horn_right",
+  "shadow",
+]);
+
+function cleanBasePath(path) {
+  return String(path || "assets/generated").replace(/\/+$/, "");
+}
+
+class AssetBank {
+  constructor(platform, basePath = "assets/generated") {
+    this.platform = platform;
+    this.basePath = cleanBasePath(basePath);
+    this.images = new Map();
+    this.failures = new Set();
+    this.loading = null;
+  }
+
+  entries() {
+    return [
+      ["background", "battlefield-anime-v2.png"],
+      ...RANGER_PARTS.map((part) => [`ranger:${part}`, `ranger/parts/${part}.png`]),
+      ...SLIME_PARTS.map((part) => [`slime:${part}`, `slime/parts/${part}.png`]),
+    ];
+  }
+
+  preload() {
+    if (this.loading) return this.loading;
+    this.loading = Promise.all(this.entries().map(async ([key, relativePath]) => {
+      try {
+        const image = await this.platform.loadImage(`${this.basePath}/${relativePath}`);
+        if (image) this.images.set(key, image);
+        else this.failures.add(key);
+      } catch {
+        this.failures.add(key);
+      }
+    })).then(() => this);
+    return this.loading;
+  }
+
+  get(key) {
+    return this.images.get(key) || null;
+  }
+
+  part(group, name) {
+    return this.get(`${group}:${name}`);
+  }
+
+  groupReady(group) {
+    const parts = group === "ranger" ? RANGER_PARTS : group === "slime" ? SLIME_PARTS : [];
+    return parts.length > 0 && parts.every((part) => this.images.has(`${group}:${part}`));
+  }
+}
+
+Object.assign(exports, { RANGER_PARTS, SLIME_PARTS, AssetBank });
 });
 
 __define("renderer", function (exports, __require) {
@@ -919,9 +1044,9 @@ const {
   ELEMENTS,
   LOGICAL_HEIGHT,
   LOGICAL_WIDTH,
+  TURN_SECONDS,
   UI,
   WAVE_COUNT,
-  WAVE_DURATION,
   cardRect,
 } = __require("core");
 
@@ -957,6 +1082,32 @@ function drawDiamond(ctx, x, y, size, color) {
   ctx.restore();
 }
 
+function drawHourglass(ctx, x, y, size, color) {
+  const half = size / 2;
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = Math.max(1.5, size * 0.12);
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(x - half, y - half);
+  ctx.lineTo(x + half, y - half);
+  ctx.moveTo(x - half, y + half);
+  ctx.lineTo(x + half, y + half);
+  ctx.moveTo(x - half * 0.72, y - half * 0.72);
+  ctx.quadraticCurveTo(x, y - 1, x - half * 0.72, y + half * 0.72);
+  ctx.moveTo(x + half * 0.72, y - half * 0.72);
+  ctx.quadraticCurveTo(x, y + 1, x + half * 0.72, y + half * 0.72);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x - half * 0.43, y + half * 0.55);
+  ctx.lineTo(x, y + half * 0.12);
+  ctx.lineTo(x + half * 0.43, y + half * 0.55);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
 function entityNumber(entity) {
   const value = Number.parseInt(String(entity.id || "0").replace(/\D/g, ""), 10);
   return Number.isFinite(value) ? value : 0;
@@ -972,9 +1123,58 @@ function actorPosition(actor) {
   };
 }
 
+const RANGER_SPRITES = Object.freeze({
+  arm_front_lower: { crop: [29, 4, 188, 248], pivot: [0.5, 0.08] },
+  arm_front_upper: { crop: [77, 4, 158, 223], pivot: [0.5, 0.08] },
+  arm_rear_lower: { crop: [68, 4, 146, 248], pivot: [0.5, 0.08] },
+  arm_rear_upper: { crop: [85, 43, 116, 197], pivot: [0.5, 0.08] },
+  arrow_fx: { crop: [4, 4, 224, 220], pivot: [0.5, 0.5] },
+  bow: { crop: [45, 4, 207, 230], pivot: [0.5, 0.5] },
+  cape: { crop: [12, 6, 240, 224], pivot: [0.5, 0.16] },
+  hair_back: { crop: [4, 14, 248, 238], pivot: [0.5, 0.5] },
+  hair_front: { crop: [4, 10, 248, 242], pivot: [0.5, 0.5] },
+  head: { crop: [48, 56, 158, 171], pivot: [0.5, 0.54] },
+  leg_front_lower: { crop: [90, 13, 114, 239], pivot: [0.5, 0.08] },
+  leg_front_upper: { crop: [73, 18, 120, 201], pivot: [0.5, 0.08] },
+  leg_rear_lower: { crop: [82, 11, 106, 241], pivot: [0.5, 0.08] },
+  leg_rear_upper: { crop: [35, 22, 161, 230], pivot: [0.5, 0.08] },
+  quiver: { crop: [4, 4, 196, 236], pivot: [0.5, 0.28] },
+  torso: { crop: [63, 27, 172, 225], pivot: [0.5, 0.55] },
+});
+
+const SLIME_SPRITES = Object.freeze({
+  arm_left: { crop: [31, 42, 210, 184], pivot: [0.5, 0.5] },
+  arm_right: { crop: [49, 45, 185, 178], pivot: [0.5, 0.5] },
+  body: { crop: [16, 40, 236, 205], pivot: [0.5, 0.59] },
+  core: { crop: [51, 54, 174, 150], pivot: [0.5, 0.5] },
+  face: { crop: [4, 115, 247, 125], pivot: [0.5, 0.57] },
+  horn_left: { crop: [66, 48, 139, 179], pivot: [0.5, 0.78] },
+  horn_right: { crop: [53, 48, 139, 179], pivot: [0.5, 0.78] },
+  shadow: { crop: [33, 134, 199, 48], pivot: [0.5, 0.5] },
+});
+
+function drawRigPart(ctx, image, sprite, x, y, scale, rotation = 0, scaleX = 1, scaleY = 1) {
+  if (!image || !sprite) return;
+  const [sx, sy, sw, sh] = sprite.crop;
+  const [pivotX, pivotY] = sprite.pivot;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(rotation);
+  ctx.scale(scale * scaleX, scale * scaleY);
+  ctx.drawImage(image, sx, sy, sw, sh, -sw * pivotX, -sh * pivotY, sw, sh);
+  ctx.restore();
+}
+
+function actionPose(actor, action, duration) {
+  if (actor.action !== action || !Number.isFinite(actor.actionTtl)) return 0;
+  const progress = 1 - clamp(actor.actionTtl / duration, 0, 1);
+  return Math.sin(progress * Math.PI);
+}
+
 class CanvasRenderer {
-  constructor(context) {
+  constructor(context, assets = null) {
     this.ctx = context;
+    this.assets = assets;
     this.time = 0;
   }
 
@@ -993,6 +1193,21 @@ class CanvasRenderer {
 
   drawBackdrop() {
     const ctx = this.ctx;
+    const background = this.assets?.get("background");
+    if (background) {
+      // The illustrated lanes occupy source y=190..590. Stretch that band onto
+      // BOARD.y..BOARD.y+height so actor lane centers stay visually aligned.
+      const backgroundScaleY = BOARD.height / 400;
+      const backgroundY = BOARD.y - 190 * backgroundScaleY;
+      ctx.drawImage(background, 0, backgroundY, LOGICAL_WIDTH, LOGICAL_HEIGHT * backgroundScaleY);
+      const cardShade = ctx.createLinearGradient(0, 540, 0, LOGICAL_HEIGHT);
+      cardShade.addColorStop(0, "rgba(16,37,31,0)");
+      cardShade.addColorStop(0.34, "rgba(16,37,31,.68)");
+      cardShade.addColorStop(1, "rgba(10,26,21,.94)");
+      ctx.fillStyle = cardShade;
+      ctx.fillRect(0, 535, LOGICAL_WIDTH, LOGICAL_HEIGHT - 535);
+      return;
+    }
     const sky = ctx.createLinearGradient(0, 0, 0, LOGICAL_HEIGHT);
     sky.addColorStop(0, "#9bd9dc");
     sky.addColorStop(0.48, "#d8e8bc");
@@ -1051,6 +1266,7 @@ class CanvasRenderer {
 
   drawBoard(state) {
     const ctx = this.ctx;
+    const illustratedBackground = Boolean(this.assets?.get("background"));
     const cellW = BOARD.width / BOARD.cols;
     const cellH = BOARD.height / BOARD.rows;
     const selected = CARD_DEFS.find((card) => card.id === state.selectedCardId);
@@ -1069,23 +1285,27 @@ class CanvasRenderer {
     ctx.shadowBlur = 0;
     roundedRect(ctx, BOARD.x, BOARD.y, BOARD.width, BOARD.height, 15);
     ctx.clip();
-    ctx.fillStyle = "#78aa62";
-    ctx.fillRect(BOARD.x, BOARD.y, BOARD.width, BOARD.height);
-
-    for (let row = 0; row < BOARD.rows; row += 1) {
-      const y = BOARD.y + row * cellH;
-      ctx.fillStyle = row % 2 ? "#cfb274" : "#d9bf82";
-      roundedRect(ctx, BOARD.x - 4, y + 6, BOARD.width + 8, cellH - 12, 18);
-      ctx.fill();
-      ctx.fillStyle = "rgba(255,248,209,.16)";
-      ctx.fillRect(BOARD.x, y + 10, BOARD.width, 3);
-      ctx.fillStyle = "rgba(80,76,46,.13)";
-      for (let mark = 0; mark < 10; mark += 1) {
-        const px = BOARD.x + ((mark * 137 + row * 61) % Math.max(1, BOARD.width - 24)) + 12;
-        const py = y + 22 + ((mark * 29 + row * 11) % Math.max(1, cellH - 42));
-        ctx.beginPath();
-        ctx.ellipse(px, py, 3 + (mark % 3), 1.5, 0.3, 0, TAU);
+    if (illustratedBackground) {
+      ctx.fillStyle = "rgba(28,58,37,.055)";
+      ctx.fillRect(BOARD.x, BOARD.y, BOARD.width, BOARD.height);
+    } else {
+      ctx.fillStyle = "#78aa62";
+      ctx.fillRect(BOARD.x, BOARD.y, BOARD.width, BOARD.height);
+      for (let row = 0; row < BOARD.rows; row += 1) {
+        const y = BOARD.y + row * cellH;
+        ctx.fillStyle = row % 2 ? "#cfb274" : "#d9bf82";
+        roundedRect(ctx, BOARD.x - 4, y + 6, BOARD.width + 8, cellH - 12, 18);
         ctx.fill();
+        ctx.fillStyle = "rgba(255,248,209,.16)";
+        ctx.fillRect(BOARD.x, y + 10, BOARD.width, 3);
+        ctx.fillStyle = "rgba(80,76,46,.13)";
+        for (let mark = 0; mark < 10; mark += 1) {
+          const px = BOARD.x + ((mark * 137 + row * 61) % Math.max(1, BOARD.width - 24)) + 12;
+          const py = y + 22 + ((mark * 29 + row * 11) % Math.max(1, cellH - 42));
+          ctx.beginPath();
+          ctx.ellipse(px, py, 3 + (mark % 3), 1.5, 0.3, 0, TAU);
+          ctx.fill();
+        }
       }
     }
 
@@ -1235,7 +1455,125 @@ class CanvasRenderer {
     }
   }
 
+  drawRangerSkeletal(unit, position, selectedCard) {
+    const ctx = this.ctx;
+    const radius = unit.radius || 22;
+    const x = position.x;
+    const baseY = position.y;
+    const phase = this.time * 2.7 + entityNumber(unit) * 0.41;
+    const breath = Math.sin(phase);
+    const attack = actionPose(unit, "attack", 0.32);
+    const hit = unit.action === "hit"
+      ? clamp((unit.actionTtl || 0) / 0.18, 0, 1)
+      : clamp((unit.hitFlash || 0) / 0.11, 0, 1);
+    const shake = Math.sin(this.time * 82 + entityNumber(unit)) * 4 * hit;
+    const visualRadius = 41 * (radius / 22);
+    const scale = radius / 22;
+    const part = (name) => this.assets?.part("ranger", name);
+
+    ctx.save();
+    ctx.translate(x + shake, baseY + breath * 0.8);
+    if (selectedCard?.type === "energy" && (unit.elements?.length || 0) < 2) {
+      ctx.strokeStyle = hexToRgba(selectedCard.color, 0.62 + Math.sin(this.time * 6) * 0.14);
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(0, -5, visualRadius, 0, TAU);
+      ctx.stroke();
+      ctx.fillStyle = hexToRgba(selectedCard.color, 0.08);
+      ctx.beginPath();
+      ctx.arc(0, -5, visualRadius - 3, 0, TAU);
+      ctx.fill();
+    }
+    (unit.formColors || []).forEach((color, index) => {
+      ctx.strokeStyle = hexToRgba(color, 0.62);
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      const start = this.time * (index ? -1.3 : 1.5) + index * Math.PI;
+      ctx.arc(0, -5, visualRadius - 4 + index * 4, start, start + Math.PI * 1.18);
+      ctx.stroke();
+    });
+    ctx.fillStyle = "rgba(34,45,30,.28)";
+    ctx.beginPath();
+    ctx.ellipse(0, 29 * scale, 24 * scale, 7 * scale, 0, 0, TAU);
+    ctx.fill();
+
+    ctx.save();
+    ctx.translate(attack * 1.4, breath * -0.45);
+    ctx.rotate(attack * -0.025);
+    ctx.scale(1 + breath * 0.008, 1 - breath * 0.012);
+
+    // Rear limbs and accessories.
+    drawRigPart(ctx, part("leg_rear_upper"), RANGER_SPRITES.leg_rear_upper, -7 * scale, 1 * scale, 0.135 * scale, 0.08 - breath * 0.018);
+    drawRigPart(ctx, part("leg_rear_lower"), RANGER_SPRITES.leg_rear_lower, -7 * scale, 18 * scale, 0.13 * scale, -0.025 + breath * 0.012);
+    drawRigPart(ctx, part("quiver"), RANGER_SPRITES.quiver, -13 * scale, -15 * scale, 0.125 * scale, -0.13);
+    drawRigPart(ctx, part("cape"), RANGER_SPRITES.cape, -4 * scale, -16 * scale, 0.145 * scale, -0.05 - breath * 0.018, 1 + breath * 0.02, 1);
+    drawRigPart(ctx, part("hair_back"), RANGER_SPRITES.hair_back, 0, -31 * scale, 0.155 * scale, breath * 0.012);
+    drawRigPart(ctx, part("arm_rear_upper"), RANGER_SPRITES.arm_rear_upper, (-10 - attack * 4) * scale, -18 * scale, 0.105 * scale, -0.48 - attack * 0.3);
+    drawRigPart(ctx, part("arm_rear_lower"), RANGER_SPRITES.arm_rear_lower, (-15 - attack * 6) * scale, (-7 - attack * 2) * scale, 0.1 * scale, -0.82 + attack * 0.28);
+
+    // Torso, front limbs, head and foreground equipment.
+    drawRigPart(ctx, part("torso"), RANGER_SPRITES.torso, 0, -8 * scale, 0.16 * scale, attack * -0.035);
+    drawRigPart(ctx, part("leg_front_upper"), RANGER_SPRITES.leg_front_upper, 6 * scale, 1 * scale, 0.135 * scale, -0.055 + breath * 0.016);
+    drawRigPart(ctx, part("leg_front_lower"), RANGER_SPRITES.leg_front_lower, 7 * scale, 18 * scale, 0.13 * scale, 0.025 - breath * 0.01);
+    drawRigPart(ctx, part("arm_front_upper"), RANGER_SPRITES.arm_front_upper, 10 * scale, -18 * scale, 0.105 * scale, 0.42 - attack * 0.28);
+    drawRigPart(ctx, part("arm_front_lower"), RANGER_SPRITES.arm_front_lower, (16 + attack * 2) * scale, (-7 - attack) * scale, 0.1 * scale, 0.72 - attack * 0.24);
+    drawRigPart(ctx, part("head"), RANGER_SPRITES.head, 1 * scale, (-31 - breath * 0.4) * scale, 0.17 * scale, attack * -0.02);
+    drawRigPart(ctx, part("hair_front"), RANGER_SPRITES.hair_front, 1 * scale, (-31 - breath * 0.4) * scale, 0.155 * scale, attack * -0.02);
+    drawRigPart(ctx, part("bow"), RANGER_SPRITES.bow, (22 + attack * 2) * scale, (-9 - attack) * scale, 0.145 * scale, -0.06 + attack * 0.08);
+    if (attack > 0.04) {
+      ctx.globalAlpha = clamp(attack * 1.45, 0, 0.9);
+      drawRigPart(ctx, part("arrow_fx"), RANGER_SPRITES.arrow_fx, (27 + attack * 3) * scale, -10 * scale, 0.12 * scale, -0.04);
+      ctx.globalAlpha = 1;
+    }
+    ctx.restore();
+    ctx.restore();
+
+    this.drawHealth(unit, x, baseY, "ally", visualRadius);
+    this.drawElements(unit, x, baseY, visualRadius);
+  }
+
+  drawSlimeSkeletal(enemy, position) {
+    const ctx = this.ctx;
+    const radius = enemy.radius || 20;
+    const x = position.x;
+    const baseY = position.y;
+    const scale = radius / 20;
+    const phase = this.time * 3.1 + entityNumber(enemy) * 0.37;
+    const pulse = Math.sin(phase);
+    const attack = actionPose(enemy, "attack", 0.32);
+    const hit = enemy.action === "hit"
+      ? clamp((enemy.actionTtl || 0) / 0.18, 0, 1)
+      : clamp((enemy.hitFlash || 0) / 0.11, 0, 1);
+    const shake = Math.sin(this.time * 86 + entityNumber(enemy)) * 4 * hit;
+    const visualRadius = 36 * scale;
+    const part = (name) => this.assets?.part("slime", name);
+
+    ctx.save();
+    ctx.translate(x + shake, baseY + pulse * 1.2);
+    drawRigPart(ctx, part("shadow"), SLIME_SPRITES.shadow, 0, 22 * scale, 0.32 * scale, 0, 1 + pulse * 0.05, 1);
+    ctx.translate(-attack * 1.4 * scale, 0);
+    ctx.rotate(-attack * 0.035);
+    ctx.scale(1 + pulse * 0.055 + attack * 0.04, 1 - pulse * 0.055 - attack * 0.03);
+
+    drawRigPart(ctx, part("horn_left"), SLIME_SPRITES.horn_left, -17 * scale, -24 * scale, 0.17 * scale, -0.18 - attack * 0.14);
+    drawRigPart(ctx, part("horn_right"), SLIME_SPRITES.horn_right, 17 * scale, -24 * scale, 0.17 * scale, 0.18 + attack * 0.1);
+    drawRigPart(ctx, part("arm_right"), SLIME_SPRITES.arm_right, 25 * scale, 0, 0.17 * scale, 0.18 + pulse * 0.06 + attack * 0.45);
+    drawRigPart(ctx, part("body"), SLIME_SPRITES.body, 0, -1 * scale, 0.27 * scale);
+    ctx.globalAlpha = 0.82 + Math.sin(this.time * 5.2) * 0.12;
+    drawRigPart(ctx, part("core"), SLIME_SPRITES.core, 0, 0, 0.16 * scale, attack * 0.08, 1 + attack * 0.06, 1 + attack * 0.06);
+    ctx.globalAlpha = 1;
+    drawRigPart(ctx, part("face"), SLIME_SPRITES.face, -1 * scale, -5 * scale, 0.215 * scale, -attack * 0.025);
+    drawRigPart(ctx, part("arm_left"), SLIME_SPRITES.arm_left, -25 * scale, 0, 0.17 * scale, -0.18 - pulse * 0.06 - attack * 0.55);
+    ctx.restore();
+
+    this.drawHealth(enemy, x, baseY, "enemy", visualRadius);
+  }
+
   drawAlly(unit, position, selectedCard) {
+    if (unit.roleId === "ranger" && this.assets?.groupReady("ranger")) {
+      this.drawRangerSkeletal(unit, position, selectedCard);
+      return;
+    }
     const ctx = this.ctx;
     const radius = unit.radius || 21;
     const x = position.x;
@@ -1308,6 +1646,10 @@ class CanvasRenderer {
   }
 
   drawMonster(enemy, position) {
+    if (enemy.monsterId === "slime" && this.assets?.groupReady("slime")) {
+      this.drawSlimeSkeletal(enemy, position);
+      return;
+    }
     const ctx = this.ctx;
     const radius = enemy.radius || 20;
     const x = position.x;
@@ -1354,12 +1696,11 @@ class CanvasRenderer {
     this.drawHealth(enemy, x, position.y, "enemy");
   }
 
-  drawHealth(actor, x, y, side) {
+  drawHealth(actor, x, y, side, visualRadius = actor.radius || 20) {
     const ctx = this.ctx;
-    const radius = actor.radius || 20;
-    const width = Math.max(34, radius * 2.15);
+    const width = Math.max(34, visualRadius * 2.15);
     const left = x - width / 2;
-    const top = y - radius - 14;
+    const top = y - visualRadius - 14;
     ctx.fillStyle = "rgba(35,31,25,.62)";
     roundedRect(ctx, left, top, width, 6, 3);
     ctx.fill();
@@ -1371,14 +1712,13 @@ class CanvasRenderer {
     }
   }
 
-  drawElements(unit, x, y) {
+  drawElements(unit, x, y, visualRadius = unit.radius || 20) {
     if (!unit.elements?.length) return;
-    const radius = unit.radius || 20;
     unit.elements.forEach((element, index) => {
       const definition = ELEMENTS[element];
       if (!definition) return;
       const px = x + (index - (unit.elements.length - 1) / 2) * 14;
-      const py = y - radius - 24;
+      const py = y - visualRadius - 24;
       this.ctx.fillStyle = "rgba(255,255,255,.72)";
       this.ctx.beginPath();
       this.ctx.arc(px, py, 6.5, 0, TAU);
@@ -1496,7 +1836,11 @@ class CanvasRenderer {
     ctx.fillText(String(state.resource), 265, 38);
 
     const waveNumber = state.wave?.index < 0 ? 1 : state.wave.index + 1;
-    const seconds = state.phase === "ready" ? WAVE_DURATION : Math.max(0, Math.ceil(WAVE_DURATION - (state.wave?.elapsed || 0)));
+    const fallbackTurnSeconds = Math.max(0.05, state.wave?.turnSeconds || state.turnSeconds || TURN_SECONDS || 1);
+    const fallbackTurn = Math.floor(Math.max(0, state.wave?.elapsed || 0) / fallbackTurnSeconds) + 1;
+    const turnNumber = Number.isFinite(state.wave?.turn)
+      ? Math.max(1, Math.floor(state.wave.turn) + 1)
+      : fallbackTurn;
     ctx.fillStyle = "rgba(48,59,46,.86)";
     roundedRect(ctx, 513, 13, 254, 48, 16);
     ctx.fill();
@@ -1504,16 +1848,19 @@ class CanvasRenderer {
     ctx.font = "900 18px ui-monospace, monospace";
     ctx.textAlign = "center";
     ctx.fillText(`${waveNumber}/${WAVE_COUNT}`, 574, 38);
-    ctx.fillStyle = seconds <= 8 && state.phase === "playing" ? "#ff7a78" : "#ffffff";
+    drawHourglass(ctx, 669, 38, 16, "#f1d77e");
+    ctx.fillStyle = "#ffffff";
     ctx.font = "900 22px ui-monospace, monospace";
-    ctx.fillText(String(seconds).padStart(2, "0"), 696, 38);
+    ctx.fillText(String(turnNumber), 712, 38);
     UI.controls.forEach((button) => this.drawControl(button, state));
     ctx.restore();
   }
 
   drawControl(button, state) {
     const ctx = this.ctx;
-    const active = (button.id === "pause" && state.phase === "paused") || (button.id === "start" && state.phase === "ready");
+    const advanceTurn = button.id === "start" && state.phase === "playing";
+    const active = (button.id === "pause" && state.phase === "paused") ||
+      (button.id === "start" && ["ready", "intermission"].includes(state.phase));
     ctx.fillStyle = active ? "rgba(104,195,135,.92)" : "rgba(48,63,50,.9)";
     ctx.strokeStyle = active ? "#d9f0a8" : "rgba(242,224,171,.42)";
     ctx.lineWidth = 1.7;
@@ -1525,7 +1872,16 @@ class CanvasRenderer {
     ctx.fillStyle = active ? "#fffbd8" : "#eee7ce";
     ctx.strokeStyle = ctx.fillStyle;
     ctx.lineWidth = 3;
-    if (button.id === "start" || (button.id === "pause" && state.phase === "paused")) {
+    if (advanceTurn) {
+      drawHourglass(ctx, cx - 6, cy, 16, "#f1d77e");
+      ctx.fillStyle = "#f7efcf";
+      ctx.beginPath();
+      ctx.moveTo(cx + 3, cy - 5);
+      ctx.lineTo(cx + 12, cy);
+      ctx.lineTo(cx + 3, cy + 5);
+      ctx.closePath();
+      ctx.fill();
+    } else if (button.id === "start" || (button.id === "pause" && state.phase === "paused")) {
       ctx.beginPath();
       ctx.moveTo(cx - 6, cy - 9);
       ctx.lineTo(cx + 9, cy);
@@ -1649,9 +2005,9 @@ class CanvasRenderer {
 
   drawPhase(state) {
     let title = "";
-    if (state.phase === "ready") title = "▶ 开始";
+    if (state.phase === "ready") title = "布阵";
     if (state.phase === "paused") title = "暂停";
-    if (state.phase === "intermission") title = `${Math.max(1, Math.ceil(state.wave?.intermission || 0))}`;
+    if (state.phase === "intermission") title = "下一波";
     if (state.phase === "victory") title = "守住了";
     if (state.phase === "defeat") title = "失守";
     if (title) {
@@ -1786,6 +2142,30 @@ class WechatPlatform {
     return setTimeout(() => wrapped(this.now()), 16);
   }
 
+  createImage() {
+    if (typeof this.canvas.createImage === "function") return this.canvas.createImage();
+    if (typeof wx.createImage === "function") return wx.createImage();
+    return null;
+  }
+
+  loadImage(source) {
+    const image = this.createImage();
+    if (!image) return Promise.resolve(null);
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (value) => {
+        if (settled) return;
+        settled = true;
+        image.onload = null;
+        image.onerror = null;
+        resolve(value);
+      };
+      image.onload = () => finish(image);
+      image.onerror = () => finish(null);
+      image.src = source;
+    });
+  }
+
   load(key) {
     try {
       return wx.getStorageSync(key) || null;
@@ -1813,7 +2193,6 @@ class WechatPlatform {
   }
 }
 
-
 Object.assign(exports, { WechatPlatform });
 });
 
@@ -1821,14 +2200,17 @@ __define("main-wechat", function (exports, __require) {
 const { TowerDefenseGame, LOGICAL_HEIGHT, LOGICAL_WIDTH } = __require("core");
 const { WechatPlatform } = __require("platform-wechat");
 const { CanvasRenderer } = __require("renderer");
+const { AssetBank } = __require("skeletal-assets");
 
-const SAVE_KEY = "xiaozhen-biehuang-tower-defense-v2";
+const SAVE_KEY = "xiaozhen-biehuang-turn-defense-v3";
 const FIXED_STEP = 1 / 60;
 
 const canvas = wx.createCanvas();
 const platform = new WechatPlatform(canvas, LOGICAL_WIDTH, LOGICAL_HEIGHT);
 const game = new TowerDefenseGame();
-const renderer = new CanvasRenderer(platform.context);
+const assets = new AssetBank(platform, "assets/generated");
+const renderer = new CanvasRenderer(platform.context, assets);
+void assets.preload();
 
 const saved = platform.load(SAVE_KEY);
 if (saved) game.restore(saved);

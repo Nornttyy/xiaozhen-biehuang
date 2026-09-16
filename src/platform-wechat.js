@@ -87,6 +87,30 @@ export class WechatPlatform {
     return setTimeout(() => wrapped(this.now()), 16);
   }
 
+  createImage() {
+    if (typeof this.canvas.createImage === "function") return this.canvas.createImage();
+    if (typeof wx.createImage === "function") return wx.createImage();
+    return null;
+  }
+
+  loadImage(source) {
+    const image = this.createImage();
+    if (!image) return Promise.resolve(null);
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (value) => {
+        if (settled) return;
+        settled = true;
+        image.onload = null;
+        image.onerror = null;
+        resolve(value);
+      };
+      image.onload = () => finish(image);
+      image.onerror = () => finish(null);
+      image.src = source;
+    });
+  }
+
   load(key) {
     try {
       return wx.getStorageSync(key) || null;
@@ -113,4 +137,3 @@ export class WechatPlatform {
     }
   }
 }
-

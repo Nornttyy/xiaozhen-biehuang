@@ -1,11 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { RANGER_PARTS, SLIME_PARTS } from "../src/skeletal-assets.js";
 
 const projectDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const srcDir = path.join(projectDir, "src");
 const outputPath = path.join(projectDir, "wechat", "game.js");
-const modules = ["core", "renderer", "platform-wechat", "main-wechat"];
+const generatedAssetsDir = path.join(projectDir, "assets", "generated");
+const generatedAssetsOutput = path.join(projectDir, "wechat", "assets", "generated");
+const modules = ["core", "skeletal-assets", "renderer", "platform-wechat", "main-wechat"];
 
 function compileModule(id) {
   const filePath = path.join(srcDir, `${id}.js`);
@@ -58,5 +61,20 @@ function __require(id) {
 const bundle = `${runtime}\n${modules.map(compileModule).join("\n\n")}\n\n__require("main-wechat");\n`;
 fs.mkdirSync(path.dirname(outputPath), { recursive: true });
 fs.writeFileSync(outputPath, bundle, "utf8");
+fs.rmSync(generatedAssetsOutput, { recursive: true, force: true });
+fs.mkdirSync(generatedAssetsOutput, { recursive: true });
+fs.copyFileSync(
+  path.join(generatedAssetsDir, "battlefield-anime-v2.png"),
+  path.join(generatedAssetsOutput, "battlefield-anime-v2.png"),
+);
+for (const [group, parts] of [["ranger", RANGER_PARTS], ["slime", SLIME_PARTS]]) {
+  const sourceParts = path.join(generatedAssetsDir, group, "parts");
+  const outputParts = path.join(generatedAssetsOutput, group, "parts");
+  fs.mkdirSync(outputParts, { recursive: true });
+  for (const part of parts) {
+    const filename = `${part}.png`;
+    fs.copyFileSync(path.join(sourceParts, filename), path.join(outputParts, filename));
+  }
+}
 console.log(`Built ${path.relative(projectDir, outputPath)} (${Buffer.byteLength(bundle)} bytes)`);
-
+console.log("Copied generated battlefield and skeletal parts (atlases excluded)");

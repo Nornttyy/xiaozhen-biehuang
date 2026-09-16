@@ -1,7 +1,7 @@
 {
   "name": "小镇别慌",
   "short_name": "小镇别慌",
-  "description": "横屏五路塔防试玩",
+  "description": "横屏五路回合制卡牌守镇试玩",
   "start_url": "./",
   "scope": "./",
   "display": "fullscreen",

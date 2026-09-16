@@ -161,37 +161,37 @@ const FORM_RECIPES = Object.freeze({
   },
 });
 
-export const WAVE_POINTS = Object.freeze([20, 24, 28, 32, 36, 42]);
-export const WAVE_DURATION = 35;
+export const TURN_SECONDS = 1.25;
+export const RAGE_TURN = 28;
 
 const WAVE_SPECS = Object.freeze([
   [
-    [0.0, "slime", 1], [3.0, "slime", 3], [6.0, "slime", 1],
-    [9.0, "slime", 3], [12.0, "slime", 1], [15.0, "slime", 3],
+    [0, "slime", 1], [0, "slime", 3], [2, "slime", 1],
+    [3, "slime", 3], [4, "slime", 1], [5, "slime", 3],
   ],
   [
-    [0.0, "slime", 0], [2.0, "bat", 4], [4.0, "slime", 2], [6.0, "bat", 1],
-    [8.0, "slime", 3], [10.5, "bat", 0], [13.0, "mushroom", 2], [16.0, "slime", 4],
+    [0, "slime", 0], [0, "bat", 4], [1, "slime", 2], [2, "bat", 1],
+    [3, "slime", 3], [4, "bat", 0], [5, "mushroom", 2], [6, "slime", 4],
   ],
   [
-    [0.0, "slime", 1], [1.8, "bat", 4], [3.6, "slime", 2], [5.4, "bat", 0],
-    [7.4, "mushroom", 3], [9.5, "slime", 0], [11.7, "slime", 4], [14.0, "brute", 2],
-    [17.0, "mushroom", 1],
+    [0, "slime", 1], [0, "bat", 4], [1, "slime", 2], [2, "bat", 0],
+    [3, "mushroom", 3], [4, "slime", 0], [5, "slime", 4], [6, "brute", 2],
+    [7, "mushroom", 1],
   ],
   [
-    [0.0, "brute", 2], [1.7, "slime", 4], [3.4, "mushroom", 0], [5.1, "bat", 3],
-    [6.8, "slime", 1], [8.5, "mushroom", 4], [10.2, "bat", 0], [12.0, "mushroom", 2],
-    [14.2, "mushroom", 1], [17.0, "brute", 3],
+    [0, "brute", 2], [0, "slime", 4], [1, "mushroom", 0], [2, "bat", 3],
+    [3, "slime", 1], [4, "mushroom", 4], [5, "bat", 0], [6, "mushroom", 2],
+    [7, "mushroom", 1], [8, "brute", 3],
   ],
   [
-    [0.0, "brute", 0], [1.6, "brute", 4], [3.2, "mushroom", 1], [4.8, "mushroom", 3],
-    [6.4, "bat", 0], [8.0, "bat", 4], [9.6, "slime", 1], [11.2, "slime", 2],
-    [12.8, "mushroom", 0], [14.4, "mushroom", 4], [17.0, "brute", 2],
+    [0, "brute", 0], [0, "brute", 4], [1, "mushroom", 1], [2, "mushroom", 3],
+    [3, "bat", 0], [4, "bat", 4], [5, "slime", 1], [6, "slime", 2],
+    [7, "mushroom", 0], [8, "mushroom", 4], [9, "brute", 2],
   ],
   [
-    [0.0, "boss", 2], [1.8, "bat", 0], [3.6, "bat", 4], [5.4, "mushroom", 1],
-    [7.2, "mushroom", 3], [9.0, "brute", 0], [11.0, "brute", 4], [13.0, "bat", 1],
-    [15.0, "bat", 3], [17.0, "mushroom", 2], [20.0, "brute", 2],
+    [0, "boss", 2], [0, "bat", 0], [0, "bat", 4], [1, "mushroom", 1],
+    [2, "mushroom", 3], [3, "brute", 0], [4, "brute", 4], [5, "bat", 1],
+    [6, "bat", 3], [7, "mushroom", 2], [8, "brute", 2],
   ],
 ]);
 
@@ -231,7 +231,7 @@ export function cardRect(index) {
 
 function freshState(seed = 0x51a7c3) {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     phase: "ready",
     previousPhase: "ready",
     battleTime: 0,
@@ -245,7 +245,7 @@ function freshState(seed = 0x51a7c3) {
     units: [],
     enemies: [],
     effects: [],
-    wave: { index: -1, elapsed: 0, duration: WAVE_DURATION, nextSpawnIndex: 0, intermission: 0 },
+    wave: { index: -1, turn: 0, elapsed: 0, nextSpawnIndex: 0, intermission: 0 },
     rngSeed: seed >>> 0,
     nextEntityId: 1,
     message: null,
@@ -277,7 +277,15 @@ export class TowerDefenseGame {
       state.phase = state.previousPhase === "paused" ? "playing" : state.previousPhase;
       return;
     }
-    if (state.phase === "ready") this.startWave(0);
+    if (state.phase === "ready") {
+      this.startWave(0);
+      return;
+    }
+    if (state.phase === "intermission") {
+      this.startWave(state.wave.index + 1);
+      return;
+    }
+    if (state.phase === "playing") this.advanceTurn();
   }
 
   togglePause() {
@@ -298,45 +306,50 @@ export class TowerDefenseGame {
   startWave(index) {
     const state = this.state;
     state.wave.index = index;
+    state.wave.turn = 0;
     state.wave.elapsed = 0;
     state.wave.nextSpawnIndex = 0;
     state.wave.intermission = 0;
-    state.wave.duration = WAVE_DURATION;
-    if (index > 0) state.resource = Math.min(state.resourceMax, Math.max(state.resource, WAVE_POINTS[index]));
     state.phase = "playing";
     state.units.forEach((unit) => {
       unit.hp = Math.min(unit.maxHp, unit.hp + unit.maxHp * 0.24);
       unit.targetId = null;
     });
+    this.spawnForTurn(0);
     this.addEffect({ type: "banner", text: `${index + 1} / ${WAVE_SPECS.length}`, ttl: 1.2 });
   }
 
   update(dt) {
-    const state = this.state;
     dt = clamp(dt, 0, 0.05);
     this.updateUiTimers(dt);
-    if (!['playing', 'intermission'].includes(state.phase)) return;
+  }
 
-    state.battleTime += dt;
-    state.resourceClock += dt;
-    while (state.resourceClock >= 3) {
-      state.resourceClock -= 3;
-      state.resource = Math.min(state.resourceMax, state.resource + 1);
-    }
-    state.deck.forEach((slot) => { slot.cooldownLeft = Math.max(0, slot.cooldownLeft - dt); });
+  advanceTurn() {
+    const state = this.state;
+    if (state.phase !== "playing") return false;
 
-    if (state.phase === "intermission") {
-      state.wave.intermission -= dt;
-      this.updateStatuses(dt);
-      if (state.wave.intermission <= 0) this.startWave(state.wave.index + 1);
-      return;
-    }
-
-    this.updateSpawns(dt);
-    this.updateStatuses(dt);
-    this.updateActors(dt);
-    this.cleanupActors();
+    state.wave.turn += 1;
+    state.resource = Math.min(state.resourceMax, state.resource + 2);
+    state.deck.forEach((slot) => {
+      slot.cooldownLeft = Math.max(0, slot.cooldownLeft - 1);
+    });
+    this.spawnForTurn(state.wave.turn);
+    this.simulateTurn(TURN_SECONDS);
     this.checkWaveEnd();
+    return true;
+  }
+
+  simulateTurn(seconds = TURN_SECONDS) {
+    let remaining = seconds;
+    while (remaining > 0 && this.state.phase === "playing") {
+      const step = Math.min(0.05, remaining);
+      remaining -= step;
+      this.state.battleTime += step;
+      this.state.wave.elapsed += step;
+      this.updateStatuses(step);
+      this.updateActors(step);
+      this.cleanupActors();
+    }
   }
 
   updateUiTimers(dt) {
@@ -346,17 +359,24 @@ export class TowerDefenseGame {
     if (state.messageTtl === 0) state.message = null;
     state.effects.forEach((effect) => { effect.ttl -= dt; });
     state.effects = state.effects.filter((effect) => effect.ttl > 0);
+    [...state.units, ...state.enemies].forEach((actor) => {
+      actor.actionTtl = Math.max(0, (actor.actionTtl || 0) - dt);
+      if (actor.actionTtl === 0) actor.action = null;
+    });
   }
 
-  updateSpawns(dt) {
+  spawnForTurn(turn) {
     const state = this.state;
     const spec = WAVE_SPECS[state.wave.index];
-    state.wave.elapsed += dt;
-    while (state.wave.nextSpawnIndex < spec.length && spec[state.wave.nextSpawnIndex][0] <= state.wave.elapsed) {
+    while (state.wave.nextSpawnIndex < spec.length && spec[state.wave.nextSpawnIndex][0] <= turn) {
       const [, type, row] = spec[state.wave.nextSpawnIndex];
       this.spawnMonster(type, row, state.wave.index);
       state.wave.nextSpawnIndex += 1;
     }
+  }
+
+  updateSpawns() {
+    this.spawnForTurn(this.state.wave.turn);
   }
 
   spawnMonster(type, row, waveIndex) {
@@ -390,6 +410,8 @@ export class TowerDefenseGame {
       attackTimer: this.random() * 0.35,
       targetId: null,
       blockedById: null,
+      action: null,
+      actionTtl: 0,
       statuses: {},
       hitFlash: 0,
     };
@@ -577,6 +599,8 @@ export class TowerDefenseGame {
   performAttack(attacker, target) {
     const isRanged = attacker.range > 90;
     const attackPower = this.getAttackPower(attacker);
+    attacker.action = "attack";
+    attacker.actionTtl = 0.32;
     this.damage(target, attackPower, attacker);
     this.addEffect({
       type: isRanged ? "shot" : "slash",
@@ -635,8 +659,8 @@ export class TowerDefenseGame {
 
   getAttackPower(attacker) {
     if (attacker.side !== "enemy") return attacker.attack;
-    const overtime = Math.max(0, this.state.wave.elapsed - WAVE_DURATION);
-    return attacker.attack * (1 + overtime / 20);
+    const overtimeTurns = Math.max(0, this.state.wave.turn - RAGE_TURN);
+    return attacker.attack * (1 + overtimeTurns / 16);
   }
 
   isSecondaryTargetAllowed(attacker, target) {
@@ -652,9 +676,14 @@ export class TowerDefenseGame {
     }
     if (target.hp <= 0) {
       target.hp = 0;
+      target.action = "down";
+      target.actionTtl = 0.7;
       source.targetId = null;
       if (source.blockedById === target.id) source.blockedById = null;
       this.addEffect({ type: "down", x: target.x, y: target.y, color: target.color, ttl: 0.5 });
+    } else {
+      target.action = "hit";
+      target.actionTtl = 0.18;
     }
   }
 
@@ -677,15 +706,16 @@ export class TowerDefenseGame {
       this.addEffect({ type: "banner", text: "完成", ttl: 3 });
     } else {
       this.state.phase = "intermission";
-      this.state.wave.intermission = 3.5;
-      this.addEffect({ type: "banner", text: `${WAVE_POINTS[this.state.wave.index + 1]}`, ttl: 1 });
+      this.state.wave.intermission = 0;
+      this.addEffect({ type: "banner", text: "▶", ttl: 1 });
     }
   }
 
   handleTap(x, y) {
-    if (this.state.phase === "ready" && !this.state.selectedCardId && inRect(x, y, UI.readyStart)) {
+    if (["ready", "intermission"].includes(this.state.phase) && !this.state.selectedCardId && inRect(x, y, UI.readyStart)) {
+      const wasReady = this.state.phase === "ready";
       this.begin();
-      return { type: "start" };
+      return { type: wasReady ? "start" : "next-wave" };
     }
 
     for (const button of UI.controls) {
@@ -748,6 +778,8 @@ export class TowerDefenseGame {
       blockCapacity: def.block || 1,
       attackTimer: 0.2,
       targetId: null,
+      action: null,
+      actionTtl: 0,
       statuses: {},
       hitFlash: 0,
       elements: [],
@@ -837,8 +869,11 @@ export class TowerDefenseGame {
   }
 
   serialize() {
+    const withoutAction = ({ action: _action, actionTtl: _actionTtl, ...actor }) => actor;
     return JSON.stringify({
       ...this.state,
+      units: this.state.units.map(withoutAction),
+      enemies: this.state.enemies.map(withoutAction),
       effects: [],
       selectedCardId: null,
       savedAt: Date.now(),
@@ -848,13 +883,18 @@ export class TowerDefenseGame {
   restore(serialized) {
     try {
       const saved = typeof serialized === "string" ? JSON.parse(serialized) : serialized;
-      if (!saved || saved.schemaVersion !== 2) return false;
+      if (!saved || saved.schemaVersion !== 3) return false;
       const next = freshState(saved.rngSeed);
       Object.assign(next, saved);
       next.effects = [];
       next.selectedCardId = null;
       next.phase = saved.phase === "paused" ? saved.previousPhase || "ready" : saved.phase;
       next.previousPhase = next.phase;
+      next.wave = {
+        ...freshState(saved.rngSeed).wave,
+        ...(saved.wave || {}),
+        turn: Math.max(0, Math.floor(saved.wave?.turn || 0)),
+      };
       next.deck = CARD_DEFS.map((card) => {
         const slot = saved.deck?.find((item) => item.cardId === card.id);
         return { cardId: card.id, cooldownLeft: Math.max(0, slot?.cooldownLeft || 0), flash: 0 };
@@ -871,12 +911,14 @@ export class TowerDefenseGame {
           lane,
           cellCol,
           blockCapacity: ROLE_DEFS[unit.roleId].block || 1,
+          action: null,
+          actionTtl: 0,
         };
       });
       next.enemies = (saved.enemies || []).filter((enemy) => MONSTER_DEFS[enemy.monsterId]).map((enemy) => {
         const fallbackLane = pointToCell(enemy.x, enemy.y)?.row || 0;
         const lane = clamp(Number.isInteger(enemy.lane) ? enemy.lane : fallbackLane, 0, BOARD.rows - 1);
-        return { ...enemy, lane, y: cellCenter(lane, 0).y };
+        return { ...enemy, lane, y: cellCenter(lane, 0).y, action: null, actionTtl: 0 };
       });
       this.state = next;
       return true;

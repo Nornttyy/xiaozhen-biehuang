@@ -86,6 +86,32 @@ export class BrowserPlatform {
     return window.requestAnimationFrame(callback);
   }
 
+  createImage() {
+    const ImageConstructor = globalThis.Image || window.Image;
+    if (typeof ImageConstructor === "function") return new ImageConstructor();
+    if (typeof document.createElement === "function") return document.createElement("img");
+    return null;
+  }
+
+  loadImage(source) {
+    const image = this.createImage();
+    if (!image) return Promise.resolve(null);
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (value) => {
+        if (settled) return;
+        settled = true;
+        image.onload = null;
+        image.onerror = null;
+        resolve(value);
+      };
+      image.onload = () => finish(image);
+      image.onerror = () => finish(null);
+      image.src = source;
+      if (image.complete && (image.naturalWidth || image.width)) finish(image);
+    });
+  }
+
   load(key) {
     try {
       return window.localStorage.getItem(key);

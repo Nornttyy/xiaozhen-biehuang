@@ -1,14 +1,17 @@
 import { TowerDefenseGame, LOGICAL_HEIGHT, LOGICAL_WIDTH } from "./core.js";
 import { BrowserPlatform } from "./platform-browser.js";
 import { CanvasRenderer } from "./renderer.js";
+import { AssetBank } from "./skeletal-assets.js";
 
-const SAVE_KEY = "xiaozhen-biehuang-tower-defense-v2";
+const SAVE_KEY = "xiaozhen-biehuang-turn-defense-v3";
 const FIXED_STEP = 1 / 60;
 
 const canvas = document.querySelector("#game");
 const platform = new BrowserPlatform(canvas, LOGICAL_WIDTH, LOGICAL_HEIGHT);
 const game = new TowerDefenseGame();
-const renderer = new CanvasRenderer(platform.context);
+const assets = new AssetBank(platform, "./assets/generated");
+const renderer = new CanvasRenderer(platform.context, assets);
+void assets.preload();
 
 const saved = platform.load(SAVE_KEY);
 if (saved) game.restore(saved);
