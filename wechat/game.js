@@ -102,11 +102,11 @@ const MONSTER_DEFS = Object.freeze({
   },
   brute: {
     id: "brute", name: "石兽", glyph: "兽", color: "#9b785f",
-    hp: 1800, attack: 125, interval: 1 / 0.45, range: 58, speed: 23, armor: 0.25, bounty: 4, gateDamage: 2,
+    hp: 700, attack: 125, interval: 1 / 0.45, range: 58, speed: 23, armor: 0.25, bounty: 4, gateDamage: 2,
   },
   boss: {
     id: "boss", name: "荒角王", glyph: "王", color: "#c04e66",
-    hp: 8000, attack: 180, interval: 1 / 0.6, range: 72, speed: 18, armor: 0.15, bounty: 15, gateDamage: 5,
+    hp: 2000, attack: 180, interval: 1 / 0.6, range: 72, speed: 18, armor: 0.15, bounty: 15, gateDamage: 5,
   },
 });
 
@@ -187,7 +187,7 @@ const WAVE_SPECS = Object.freeze([
   ],
   [
     [0, "slime", 0], [0, "bat", 4], [1, "slime", 2], [2, "bat", 1],
-    [3, "slime", 3], [4, "bat", 0], [5, "mushroom", 2], [6, "slime", 4],
+    [2, "mushroom", 2], [3, "slime", 3], [4, "bat", 0], [6, "slime", 4],
   ],
   [
     [0, "slime", 1], [0, "bat", 4], [1, "slime", 2], [2, "bat", 0],
@@ -207,7 +207,7 @@ const WAVE_SPECS = Object.freeze([
   [
     [0, "boss", 2], [0, "bat", 0], [0, "bat", 4], [1, "mushroom", 1],
     [2, "mushroom", 3], [3, "brute", 0], [4, "brute", 4], [5, "bat", 1],
-    [6, "bat", 3], [7, "mushroom", 2], [8, "brute", 2],
+    [6, "bat", 3], [7, "mushroom", 2],
   ],
 ]);
 
