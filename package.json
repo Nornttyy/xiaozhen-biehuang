@@ -1,0 +1,17 @@
+{
+  "name": "xiaozhen-biehuang-tower-defense-prototype",
+  "version": "0.2.0",
+  "description": "《小镇别慌》横屏五路塔防试玩",
+  "private": true,
+  "type": "module",
+  "homepage": "https://nornttyy.github.io/xiaozhen-biehuang/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Nornttyy/xiaozhen-biehuang.git"
+  },
+  "scripts": {
+    "start": "python3 -m http.server 8080",
+    "test": "node --test tests/*.test.mjs",
+    "build:wechat": "node scripts/build-wechat.mjs"
+  }
+}

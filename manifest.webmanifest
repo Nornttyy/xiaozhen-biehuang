@@ -1,0 +1,19 @@
+{
+  "name": "小镇别慌",
+  "short_name": "小镇别慌",
+  "description": "横屏五路塔防试玩",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#10271f",
+  "theme_color": "#18382f",
+  "icons": [
+    {
+      "src": "./favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
