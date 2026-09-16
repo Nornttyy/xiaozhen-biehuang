@@ -1,7 +1,7 @@
 :root {
-  color-scheme: dark;
+  color-scheme: light;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  background: #10271f;
+  background: #f4eff9;
 }
 
 * {
@@ -15,9 +15,9 @@ body {
   margin: 0;
   overflow: hidden;
   background:
-    radial-gradient(circle at 18% 20%, rgba(126, 190, 143, 0.28), transparent 34%),
-    radial-gradient(circle at 84% 76%, rgba(117, 67, 99, 0.22), transparent 38%),
-    #10271f;
+    radial-gradient(circle at 18% 20%, #ffe4e9, transparent 40%),
+    radial-gradient(circle at 84% 76%, #e4ddf5, transparent 40%),
+    #f4eff9;
 }
 
 body {
@@ -46,8 +46,8 @@ canvas {
   max-height: 100%;
   aspect-ratio: 16 / 9;
   border-radius: 14px;
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
-  outline: 1px solid rgba(239, 225, 177, 0.2);
+  box-shadow: 0 24px 80px rgba(97, 67, 120, 0.15);
+  outline: 1px solid rgba(255, 255, 255, 0.8);
   touch-action: none;
 }
 
@@ -59,8 +59,8 @@ canvas {
   place-content: center;
   justify-items: center;
   gap: 8px;
-  color: #fff4cf;
-  background: #17372e;
+  color: #806893;
+  background: #f4eff9;
   pointer-events: auto;
 }
 
@@ -73,6 +73,18 @@ canvas {
   font-size: 16px;
   font-weight: 800;
   letter-spacing: 0.18em;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 @media (orientation: portrait) and (max-width: 900px) {

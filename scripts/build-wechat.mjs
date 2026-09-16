@@ -8,7 +8,7 @@ const srcDir = path.join(projectDir, "src");
 const outputPath = path.join(projectDir, "wechat", "game.js");
 const generatedAssetsDir = path.join(projectDir, "assets", "generated");
 const generatedAssetsOutput = path.join(projectDir, "wechat", "assets", "generated");
-const modules = ["core", "skeletal-assets", "renderer", "platform-wechat", "main-wechat"];
+const modules = ["core", "skeletal-assets", "renderer", "puzzle-core", "puzzle-renderer", "puzzle-runtime", "platform-wechat", "main-wechat"];
 
 function compileModule(id) {
   const filePath = path.join(srcDir, `${id}.js`);
@@ -76,5 +76,7 @@ for (const [group, parts] of [["ranger", RANGER_PARTS], ["slime", SLIME_PARTS]])
     fs.copyFileSync(path.join(sourceParts, filename), path.join(outputParts, filename));
   }
 }
+fs.mkdirSync(path.join(generatedAssetsOutput, "puzzle"), { recursive: true });
+fs.copyFileSync(path.join(generatedAssetsDir, "puzzle", "heroine-portraits-v1.png"), path.join(generatedAssetsOutput, "puzzle", "heroine-portraits-v1.png"));
 console.log(`Built ${path.relative(projectDir, outputPath)} (${Buffer.byteLength(bundle)} bytes)`);
-console.log("Copied generated battlefield and skeletal parts (atlases excluded)");
+console.log("Copied puzzle portraits, battlefield and skeletal parts (source rig atlases excluded)");

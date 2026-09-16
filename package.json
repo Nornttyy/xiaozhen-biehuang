@@ -1,7 +1,7 @@
 {
-  "name": "xiaozhen-biehuang-turn-defense-prototype",
-  "version": "0.3.0",
-  "description": "《小镇别慌》横屏五路回合制卡牌守镇试玩",
+  "name": "xiaozhen-biehuang-puzzle",
+  "version": "0.4.0",
+  "description": "《小镇别慌》美少女消消乐",
   "private": true,
   "type": "module",
   "homepage": "https://nornttyy.github.io/xiaozhen-biehuang/",

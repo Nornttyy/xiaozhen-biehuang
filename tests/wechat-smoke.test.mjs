@@ -39,7 +39,11 @@ test("WeChat bundle creates a landscape canvas and installs touch input", async 
   assert.equal(canvas.width, 1280);
   assert.equal(canvas.height, 720);
   assert.equal(typeof touchListener, "function");
+  touchListener({ changedTouches: [{ clientX: 665, clientY: 195 }] });
+  const saved = JSON.parse(storage.get("xiaozhen-biehuang-puzzle-v1"));
+  assert.equal(saved.mode, "puzzle");
+  assert.equal(saved.moves, 24);
+  assert.equal(saved.board.length, 42);
 
   delete globalThis.wx;
 });
-

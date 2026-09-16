@@ -43,10 +43,12 @@ test("browser entry renders its first frame against the platform contract", asyn
     addEventListener() {},
   };
 
-  await import(`../src/main.js?smoke=${Date.now()}`);
+  const { runtime } = await import(`../src/main.js?smoke=${Date.now()}`);
   assert.ok(canvas.width > 0);
   assert.ok(canvas.height > 0);
   assert.ok(Math.abs(canvas.width / canvas.height - 16 / 9) < 0.002);
+  assert.equal(runtime.game.state.mode, "puzzle");
+  assert.equal(runtime.game.state.board.length, 42);
 
   delete globalThis.window;
   delete globalThis.document;

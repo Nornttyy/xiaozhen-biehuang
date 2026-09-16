@@ -8,7 +8,7 @@ import { AssetBank, RANGER_PARTS, SLIME_PARTS } from "../src/skeletal-assets.js"
 
 const projectDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-test("asset bank loads one background and 24 independent skeletal parts", async () => {
+test("asset bank loads puzzle portraits, background and 24 independent skeletal parts", async () => {
   const requested = [];
   const platform = {
     async loadImage(source) {
@@ -19,8 +19,8 @@ test("asset bank loads one background and 24 independent skeletal parts", async 
   const assets = new AssetBank(platform, "assets/generated/");
   await assets.preload();
 
-  assert.equal(requested.length, 25);
-  assert.equal(new Set(requested).size, 25);
+  assert.equal(requested.length, 26);
+  assert.equal(new Set(requested).size, 26);
   assert.equal(RANGER_PARTS.length, 16);
   assert.equal(SLIME_PARTS.length, 8);
   assert.equal(assets.groupReady("ranger"), true);
@@ -31,6 +31,7 @@ test("asset bank loads one background and 24 independent skeletal parts", async 
 test("browser and WeChat packs contain the same production PNGs without atlases", async () => {
   const relativePaths = [
     "battlefield-anime-v2.png",
+    "puzzle/heroine-portraits-v1.png",
     ...RANGER_PARTS.map((part) => `ranger/parts/${part}.png`),
     ...SLIME_PARTS.map((part) => `slime/parts/${part}.png`),
   ];

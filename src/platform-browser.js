@@ -78,6 +78,14 @@ export class BrowserPlatform {
     this.visibilityHandler = handler;
   }
 
+  announce(state) {
+    const phase = { playing: "进行中", paused: "已暂停", levels: "选择关卡", victory: "已通关", defeat: "再试一次" }[state.phase];
+    const text = `${phase}。第 ${state.level} 关，剩余 ${state.moves} 步，生命 ${state.hp}，已击败 ${state.foeIndex} / 3。点击两块以上相邻同色方块。`;
+    this.canvas.setAttribute?.("aria-label", text);
+    const status = document.querySelector("#game-status");
+    if (status) status.textContent = text;
+  }
+
   now() {
     return performance.now();
   }

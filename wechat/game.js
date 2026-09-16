@@ -1001,6 +1001,7 @@ class AssetBank {
   entries() {
     return [
       ["background", "battlefield-anime-v2.png"],
+      ["portraits", "puzzle/heroine-portraits-v1.png"],
       ...RANGER_PARTS.map((part) => [`ranger:${part}`, `ranger/parts/${part}.png`]),
       ...SLIME_PARTS.map((part) => [`slime:${part}`, `slime/parts/${part}.png`]),
     ];
@@ -2052,6 +2053,634 @@ class CanvasRenderer {
 Object.assign(exports, { CanvasRenderer });
 });
 
+__define("puzzle-core", function (exports, __require) {
+const LOGICAL_WIDTH = 1280;
+const LOGICAL_HEIGHT = 720;
+const LEVEL_COUNT = 10;
+const GRID = Object.freeze({ x: 626, y: 156, cols: 7, rows: 6, cell: 78 });
+const COLORS = Object.freeze([
+  { id: "fire", name: "小暖", skill: "焰花", color: "#f88b91", dark: "#d65e79", light: "#ffe5df" },
+  { id: "ice", name: "小雪", skill: "冰息", color: "#86ccec", dark: "#4ba5d2", light: "#e4f5ff" },
+  { id: "lightning", name: "星铃", skill: "星闪", color: "#b7a0ed", dark: "#8b72c4", light: "#eee6ff" },
+  { id: "nature", name: "叶叶", skill: "花语", color: "#90d7b5", dark: "#57ab8c", light: "#e2f9eb" },
+  { id: "heart", name: "爱心", color: "#f6afce", dark: "#d677a9", light: "#ffe7f1" },
+]);
+const BUTTONS = Object.freeze({
+  levels: { x: 760, y: 32, w: 144, h: 52 },
+  pause: { x: 1104, y: 32, w: 52, h: 52 },
+  restart: { x: 1170, y: 32, w: 52, h: 52 },
+  shuffle: { x: 880, y: 643, w: 138, h: 48 },
+  hammer: { x: 1030, y: 643, w: 160, h: 48 },
+  primary: { x: 525, y: 438, w: 230, h: 58 },
+  close: { x: 903, y: 145, w: 40, h: 40 },
+});
+const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
+const inside = (x, y, rect) => x >= rect.x && y >= rect.y && x < rect.x + rect.w && y < rect.y + rect.h;
+function tileCenter(index) {
+  return { x: GRID.x + (index % GRID.cols + 0.5) * GRID.cell, y: GRID.y + (Math.floor(index / GRID.cols) + 0.5) * GRID.cell };
+}
+function tileAt(x, y) {
+  if (!inside(x, y, { ...GRID, w: GRID.cols * GRID.cell, h: GRID.rows * GRID.cell })) return -1;
+  return Math.floor((y - GRID.y) / GRID.cell) * GRID.cols + Math.floor((x - GRID.x) / GRID.cell);
+}
+function levelRect(index) {
+  return { x: 371 + (index % 5) * 110, y: 252 + Math.floor(index / 5) * 112, w: 98, h: 98 };
+}
+function neighbors(index) {
+  const list = [], row = Math.floor(index / GRID.cols), col = index % GRID.cols;
+  if (row > 0) list.push(index - GRID.cols);
+  if (row < GRID.rows - 1) list.push(index + GRID.cols);
+  if (col > 0) list.push(index - 1);
+  if (col < GRID.cols - 1) list.push(index + 1);
+  return list;
+}
+function connected(board, index) {
+  if (!board[index]) return [];
+  const type = board[index].type, found = new Set([index]), queue = [index];
+  for (let n = 0; n < queue.length; n++) {
+    for (const next of neighbors(queue[n])) {
+      if (!found.has(next) && board[next]?.type === type) { found.add(next); queue.push(next); }
+    }
+  }
+  return queue;
+}
+function possibleMoves(board) {
+  const checked = new Set(), moves = [];
+  board.forEach((tile, index) => {
+    if (tile.special) moves.push([index]);
+    if (checked.has(index)) return;
+    const group = connected(board, index);
+    group.forEach((i) => checked.add(i));
+    if (group.length >= 2) moves.push(group);
+  });
+  return moves;
+}
+function foesFor(level) {
+  return [
+    { name: "软糖团", kind: 0, maxHp: 90 + level * 17, interval: 4, attack: 8 + level },
+    { name: "捣蛋团", kind: 1, maxHp: 130 + level * 20, interval: 3, attack: 9 + level },
+    { name: level % 5 === 0 ? "甜梦魔王" : "大角团", kind: 2, maxHp: 180 + level * 25, interval: 3, attack: 11 + level },
+  ].map((foe) => ({ ...foe, hp: foe.maxHp, countdown: foe.interval }));
+}
+class PuzzleGame {
+  constructor(seed = Date.now()) {
+    this.seed = (seed >>> 0) || 1;
+    this.state = { unlocked: 1, bestStars: Array(LEVEL_COUNT).fill(0) };
+    this.startLevel(1);
+  }
+  random() {
+    let x = this.seed;
+    x ^= x << 13; x ^= x >>> 17; x ^= x << 5;
+    this.seed = x >>> 0;
+    return this.seed / 4294967296;
+  }
+  newTile(fromRow = -1) {
+    return { id: this.state.nextId++, type: Math.floor(this.random() * COLORS.length), special: null, fromRow };
+  }
+  startLevel(level) {
+    level = clamp(Math.floor(level), 1, LEVEL_COUNT);
+    const { unlocked, bestStars } = this.state;
+    this.state = {
+      schemaVersion: 4, mode: "puzzle", level, unlocked: Math.max(unlocked || 1, level), bestStars: bestStars || Array(LEVEL_COUNT).fill(0),
+      phase: "playing", previousPhase: "playing", board: [], nextId: 1, moves: 25, movesUsed: 0,
+      hp: 100, maxHp: 100, score: 0, foeIndex: 0, foes: foesFor(level), charges: [0, 0, 0, 0],
+      activeHero: 0, heroActions: [0, 0, 0, 0], shuffles: 2, hammers: 2, hammerArmed: false,
+      lock: 0, idle: 0, animation: null, stars: 0, toast: "", toastTtl: 0, reject: -1, rejectTtl: 0,
+    };
+    this.state.board = Array.from({ length: GRID.rows * GRID.cols }, (_, i) => this.newTile(Math.floor(i / GRID.cols)));
+    if (level === 1) [0, 1, 7, 8].forEach((i) => { this.state.board[i].type = 0; });
+    this.ensurePlayable();
+  }
+  get foe() { return this.state.foes[this.state.foeIndex] || null; }
+  showToast(message) { this.state.toast = message; this.state.toastTtl = 1.5; }
+  ensurePlayable() {
+    if (possibleMoves(this.state.board).length) return false;
+    this.shuffleBoard();
+    this.showToast("换个排列");
+    return true;
+  }
+  shuffleBoard() {
+    const board = this.state.board;
+    for (let pass = 0; pass < 10; pass++) {
+      for (let i = board.length - 1; i > 0; i--) {
+        const j = Math.floor(this.random() * (i + 1));
+        [board[i], board[j]] = [board[j], board[i]];
+      }
+      if (possibleMoves(board).length) break;
+    }
+    if (!possibleMoves(board).length) board[1].type = board[0].type;
+    board.forEach((tile, i) => { tile.fromRow = Math.floor(i / GRID.cols) - 0.35; });
+  }
+  expandSpecials(indices) {
+    const board = this.state.board, found = new Set(indices), queue = [...indices];
+    for (let k = 0; k < queue.length; k++) {
+      const index = queue[k], tile = board[index];
+      if (!tile.special) continue;
+      const row = Math.floor(index / GRID.cols), col = index % GRID.cols;
+      board.forEach((other, i) => {
+        const r = Math.floor(i / GRID.cols), c = i % GRID.cols;
+        const hit = tile.special === "line" ? r === row : tile.special === "bomb" ? Math.abs(r - row) <= 1 && Math.abs(c - col) <= 1 : other.type === tile.type;
+        if (hit && !found.has(i)) { found.add(i); queue.push(i); }
+      });
+    }
+    return [...found];
+  }
+  refill(removed) {
+    const s = this.state, next = Array(s.board.length), removedSet = new Set(removed);
+    for (let col = 0; col < GRID.cols; col++) {
+      const survivors = [];
+      for (let row = GRID.rows - 1; row >= 0; row--) {
+        const index = row * GRID.cols + col;
+        if (!removedSet.has(index)) survivors.push({ ...s.board[index], fromRow: row });
+      }
+      for (let row = GRID.rows - 1, n = 0; row >= 0; row--, n++) {
+        next[row * GRID.cols + col] = survivors[n] || this.newTile(-(n - survivors.length + 1));
+      }
+    }
+    s.board = next;
+  }
+  clear(index) {
+    const s = this.state;
+    if (s.phase !== "playing" || s.lock > 0 || !s.board[index]) return false;
+    const hammer = s.hammerArmed;
+    if (hammer && s.hammers <= 0) return false;
+    const selected = s.board[index], group = hammer || selected.special ? [index] : connected(s.board, index);
+    if (!hammer && !selected.special && group.length < 2) {
+      s.reject = index; s.rejectTtl = 0.3; return false;
+    }
+    const indices = this.expandSpecials(group), counts = Array(5).fill(0);
+    const removed = indices.map((i) => ({ ...s.board[i], index: i }));
+    indices.forEach((i) => counts[s.board[i].type]++);
+    const containsSpecial = indices.some((i) => s.board[i].special);
+    const special = !hammer && !containsSpecial && group.length >= 4 ? group.length >= 7 ? "rainbow" : group.length >= 5 ? "bomb" : "line" : null;
+    if (special) s.board[index] = { ...selected, special };
+    this.refill(indices.filter((i) => !special || i !== index));
+    if (hammer) { s.hammers--; s.hammerArmed = false; }
+    else { s.moves--; s.movesUsed++; }
+    s.score += indices.length * 80 + Math.max(0, indices.length - 2) ** 2 * 15;
+    let damage = counts.slice(0, 4).reduce((a, b) => a + b, 0) * 13 + Math.max(0, indices.length - 2) * 7;
+    let heal = counts[4] * 6, freeze = 0;
+    const skills = [];
+    s.activeHero = selected.type < 4 ? selected.type : 3;
+    counts.slice(0, 4).forEach((amount, type) => {
+      s.charges[type] += amount;
+      if (amount) s.heroActions[type] = 0.65;
+      while (s.charges[type] >= 10) {
+        s.charges[type] -= 10;
+        damage += [85, 55, 100, 60][type];
+        if (type === 1) freeze += 2;
+        if (type === 3) heal += 18;
+        skills.push(type);
+      }
+    });
+    const healed = Math.min(heal, s.maxHp - s.hp);
+    s.hp = Math.min(s.maxHp, s.hp + heal);
+    const targetBefore = s.foeIndex;
+    let remainingDamage = damage;
+    while (this.foe && remainingDamage > 0) {
+      const hit = Math.min(this.foe.hp, remainingDamage);
+      this.foe.hp -= hit; remainingDamage -= hit;
+      if (this.foe.hp === 0) s.foeIndex++;
+      else break;
+    }
+    let enemyDamage = 0;
+    if (this.foe) {
+      this.foe.countdown += freeze;
+      if (!hammer && s.foeIndex === targetBefore) {
+        this.foe.countdown--;
+        if (this.foe.countdown <= 0) {
+          enemyDamage = this.foe.attack;
+          s.hp = Math.max(0, s.hp - enemyDamage);
+          this.foe.countdown = this.foe.interval;
+        }
+      }
+    }
+    s.animation = { age: 0, duration: 0.7, removed, count: indices.length, type: selected.type, special, damage, healed, enemyDamage, skills, defeated: s.foeIndex > targetBefore };
+    s.lock = 0.5; s.idle = 0;
+    if (!this.foe) {
+      s.phase = "victory";
+      s.stars = s.hp >= 60 && s.moves >= 7 ? 3 : s.hp >= 30 ? 2 : 1;
+      s.bestStars[s.level - 1] = Math.max(s.bestStars[s.level - 1], s.stars);
+      s.unlocked = Math.max(s.unlocked, Math.min(LEVEL_COUNT, s.level + 1));
+    } else if (s.hp <= 0 || s.moves <= 0) {
+      s.phase = "defeat";
+    } else this.ensurePlayable();
+    return true;
+  }
+  shuffle() {
+    const s = this.state;
+    if (s.phase !== "playing" || s.lock > 0 || s.shuffles <= 0) return false;
+    s.shuffles--; s.hammerArmed = false; s.idle = 0;
+    this.shuffleBoard(); s.lock = 0.35;
+    s.animation = { age: 0, duration: 0.45, removed: [], count: 0, skills: [], damage: 0 };
+    return true;
+  }
+  togglePause() {
+    const s = this.state;
+    if (s.phase === "playing") { s.phase = "paused"; s.hammerArmed = false; }
+    else if (s.phase === "paused") s.phase = "playing";
+  }
+  pauseForVisibility() { if (this.state.phase === "playing") this.togglePause(); }
+  update(dt) {
+    const s = this.state;
+    if (s.phase === "paused" || s.phase === "levels") return;
+    dt = clamp(dt, 0, 0.1);
+    s.lock = Math.max(0, s.lock - dt); s.idle += dt;
+    s.toastTtl = Math.max(0, s.toastTtl - dt); s.rejectTtl = Math.max(0, s.rejectTtl - dt);
+    s.heroActions = s.heroActions.map((v) => Math.max(0, v - dt));
+    if (s.animation) { s.animation.age += dt; if (s.animation.age > 1.3) s.animation = null; }
+  }
+  handleTap(x, y) {
+    const s = this.state;
+    if (s.phase === "levels") {
+      if (inside(x, y, BUTTONS.close)) { s.phase = s.previousPhase; return { type: "menu-close" }; }
+      for (let i = 0; i < s.unlocked; i++) if (inside(x, y, levelRect(i))) { this.startLevel(i + 1); return { type: "level" }; }
+      return null;
+    }
+    if (inside(x, y, BUTTONS.levels)) { s.previousPhase = s.phase; s.phase = "levels"; s.hammerArmed = false; return { type: "menu" }; }
+    if (inside(x, y, BUTTONS.pause)) { this.togglePause(); return { type: "pause" }; }
+    if (inside(x, y, BUTTONS.restart)) { this.startLevel(s.level); return { type: "restart" }; }
+    if (s.phase !== "playing") {
+      if ((s.phase !== "paused" && s.lock > 0) || !inside(x, y, BUTTONS.primary)) return null;
+      if (s.phase === "paused") this.togglePause();
+      else this.startLevel(s.phase === "victory" ? Math.min(LEVEL_COUNT, s.level + 1) : s.level);
+      return { type: "continue" };
+    }
+    if (s.lock > 0) return null;
+    if (inside(x, y, BUTTONS.shuffle)) return this.shuffle() ? { type: "shuffle" } : null;
+    if (inside(x, y, BUTTONS.hammer)) {
+      if (s.hammers > 0) s.hammerArmed = !s.hammerArmed;
+      return { type: "hammer-arm" };
+    }
+    const index = tileAt(x, y);
+    return index >= 0 && this.clear(index) ? { type: "clear" } : null;
+  }
+  serialize() {
+    const s = this.state;
+    return JSON.stringify({ ...s, rngSeed: this.seed, phase: s.phase === "levels" ? s.previousPhase : s.phase,
+      lock: 0, animation: null, idle: 0, toast: "", toastTtl: 0, hammerArmed: false, heroActions: [0, 0, 0, 0] });
+  }
+  restore(serialized) {
+    try {
+      const s = typeof serialized === "string" ? JSON.parse(serialized) : serialized;
+      const integer = (v, lo, hi) => Number.isInteger(v) && v >= lo && v <= hi;
+      if (!s || s.schemaVersion !== 4 || s.mode !== "puzzle" || !integer(s.level, 1, LEVEL_COUNT) || !integer(s.unlocked, s.level, LEVEL_COUNT)) return false;
+      if (!["playing", "paused", "victory", "defeat"].includes(s.phase) || !Array.isArray(s.board) || s.board.length !== 42) return false;
+      if (!s.board.every((tile) => tile && integer(tile.id, 1, 1e9) && integer(tile.type, 0, 4) && [null, "line", "bomb", "rainbow"].includes(tile.special))) return false;
+      if (new Set(s.board.map((tile) => tile.id)).size !== 42 || !integer(s.nextId, Math.max(...s.board.map((t) => t.id)) + 1, 1e9)) return false;
+      if (!integer(s.hp, 0, 100) || s.maxHp !== 100 || !integer(s.moves, 0, 25) || !integer(s.movesUsed, 0, 25) || s.moves + s.movesUsed !== 25) return false;
+      if (!integer(s.foeIndex, 0, 3) || !Array.isArray(s.foes) || s.foes.length !== 3) return false;
+      if (!s.foes.every((f) => f && Number.isFinite(f.hp) && f.hp >= 0 && Number.isFinite(f.maxHp) && f.maxHp > 0 && f.hp <= f.maxHp && integer(f.countdown, 1, 100) && integer(f.interval, 1, 10) && integer(f.attack, 1, 100))) return false;
+      if (!Array.isArray(s.charges) || s.charges.length !== 4 || !s.charges.every((v) => integer(v, 0, 9))) return false;
+      if (!Array.isArray(s.bestStars) || s.bestStars.length !== LEVEL_COUNT || !s.bestStars.every((v) => integer(v, 0, 3))) return false;
+      if (!integer(s.shuffles, 0, 2) || !integer(s.hammers, 0, 2) || !integer(s.score, 0, 1e9) || !integer(s.activeHero, 0, 3) || !integer(s.stars, 0, 3)) return false;
+      if (["playing", "paused"].includes(s.phase) && (s.hp <= 0 || s.moves <= 0 || s.foeIndex === 3 || s.foes[s.foeIndex].hp <= 0)) return false;
+      if (s.phase === "victory" && s.foeIndex !== 3) return false;
+      this.state = { ...s, board: s.board.map((tile, i) => ({ ...tile, fromRow: Math.floor(i / GRID.cols) })),
+        lock: 0, animation: null, idle: 0, toast: "", toastTtl: 0, rejectTtl: 0, hammerArmed: false, heroActions: [0, 0, 0, 0] };
+      this.seed = (s.rngSeed >>> 0) || 1;
+      this.ensurePlayable();
+      return true;
+    } catch { return false; }
+  }
+}
+
+Object.assign(exports, { LOGICAL_WIDTH, LOGICAL_HEIGHT, LEVEL_COUNT, GRID, COLORS, BUTTONS, inside, tileCenter, tileAt, levelRect, neighbors, connected, possibleMoves, PuzzleGame });
+});
+
+__define("puzzle-renderer", function (exports, __require) {
+const { GRID, COLORS, BUTTONS, LEVEL_COUNT, possibleMoves, tileCenter, levelRect } = __require("puzzle-core");
+const { CanvasRenderer } = __require("renderer");
+
+const TAU = Math.PI * 2;
+const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
+const INK = "#574368", MUTED = "#9b8ca7";
+function round(ctx, x, y, w, h, r = 20) {
+  r = Math.min(r, w / 2, h / 2);
+  ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+function panel(ctx, x, y, w, h, fill = "#fffafd", stroke = "#e8dcec", r = 22) {
+  round(ctx, x, y, w, h, r); ctx.fillStyle = fill; ctx.fill();
+  if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 2; ctx.stroke(); }
+}
+function label(ctx, str, x, y, size = 18, color = INK, align = "left", weight = 700) {
+  ctx.fillStyle = color; ctx.font = `${weight} ${size}px "PingFang SC", "Microsoft YaHei", sans-serif`;
+  ctx.textAlign = align; ctx.textBaseline = "middle"; ctx.fillText(String(str), x, y);
+}
+function star(ctx, x, y, radius, fill) {
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const a = -Math.PI / 2 + i * Math.PI / 5, r = i % 2 ? radius * 0.46 : radius;
+    if (i === 0) ctx.moveTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
+    else ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
+  }
+  ctx.closePath(); ctx.fillStyle = fill; ctx.fill();
+}
+function symbol(ctx, type, x, y, size, color = "#fffdfc") {
+  ctx.save(); ctx.translate(x, y); ctx.scale(size / 40, size / 40);
+  ctx.fillStyle = color; ctx.strokeStyle = color; ctx.lineWidth = 3.8; ctx.lineCap = "round"; ctx.lineJoin = "round";
+  ctx.beginPath();
+  if (type === 0) {
+    ctx.moveTo(1, -20); ctx.bezierCurveTo(18, -5, 3, -3, 15, -11); ctx.bezierCurveTo(28, 10, 8, 24, -7, 17);
+    ctx.bezierCurveTo(-23, 10, -16, -3, -11, -9); ctx.bezierCurveTo(-11, 5, 5, -1, 1, -20); ctx.fill();
+    ctx.fillStyle = "rgba(255,209,119,.75)"; ctx.beginPath(); ctx.moveTo(1, -2); ctx.quadraticCurveTo(13, 11, 0, 15); ctx.quadraticCurveTo(-10, 10, 1, -2); ctx.fill();
+  } else if (type === 1) {
+    for (let i = 0; i < 6; i++) { ctx.save(); ctx.rotate(i * Math.PI / 3); ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -18); ctx.moveTo(-5, -13); ctx.lineTo(0, -8); ctx.lineTo(5, -13); ctx.stroke(); ctx.restore(); }
+  } else if (type === 2) {
+    ctx.moveTo(4, -20); ctx.lineTo(-15, 3); ctx.lineTo(-2, 3); ctx.lineTo(-6, 21); ctx.lineTo(16, -4); ctx.lineTo(3, -4); ctx.closePath(); ctx.fill();
+  } else if (type === 3) {
+    ctx.moveTo(15, -19); ctx.bezierCurveTo(-17, -20, -24, 9, -4, 14); ctx.bezierCurveTo(16, 20, 20, -6, 15, -19); ctx.fill();
+    ctx.strokeStyle = "#70b99c"; ctx.lineWidth = 2.3; ctx.beginPath(); ctx.moveTo(-10, 18); ctx.quadraticCurveTo(-1, 5, 11, -11); ctx.stroke();
+  } else {
+    ctx.moveTo(0, 18); ctx.bezierCurveTo(-31, -1, -19, -24, 0, -10); ctx.bezierCurveTo(19, -24, 31, -1, 0, 18); ctx.fill();
+  }
+  ctx.restore();
+}
+function button(ctx, rect, text, fill = "#fffafd", color = INK) {
+  panel(ctx, rect.x, rect.y + 3, rect.w, rect.h, "#d9cbe2", null, 17);
+  panel(ctx, rect.x, rect.y, rect.w, rect.h, fill, "#e0d3e8", 17);
+  label(ctx, text, rect.x + rect.w / 2, rect.y + rect.h / 2, 18, color, "center");
+}
+
+class PuzzleRenderer extends CanvasRenderer {
+  // Battle health is shown once in the new puzzle HUD.
+  drawHealth() {}
+  drawElements() {}
+  draw(state, dt = 0) {
+    if (!["paused", "levels"].includes(state.phase)) this.time += dt;
+    const ctx = this.ctx;
+    ctx.clearRect(0, 0, 1280, 720);
+    this.backdrop();
+    this.header(state);
+    this.battle(state);
+    this.team(state);
+    this.board(state);
+    this.effects(state);
+    this.footer(state);
+    this.overlay(state);
+  }
+  backdrop() {
+    const ctx = this.ctx;
+    ctx.fillStyle = "#f4eff9"; ctx.fillRect(0, 0, 1280, 720);
+    ctx.fillStyle = "#ffe5e6"; ctx.beginPath(); ctx.ellipse(85, 200, 270, 400, -0.3, 0, TAU); ctx.fill();
+    ctx.fillStyle = "#e5eafa"; ctx.beginPath(); ctx.ellipse(1250, 625, 260, 370, 0.3, 0, TAU); ctx.fill();
+    for (let i = 0; i < 28; i++) {
+      const x = (i * 173 + 32) % 1280, y = (i * 97 + 17) % 720;
+      star(ctx, x, y, 3 + i % 3, i % 2 ? "#e3d6ed" : "#f2cdd9");
+    }
+    ctx.strokeStyle = "#ded0e8"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(32, 100); ctx.lineTo(1248, 100); ctx.stroke();
+  }
+  header(s) {
+    const ctx = this.ctx;
+    star(ctx, 57, 54, 23, "#f4ab7f"); star(ctx, 57, 54, 13, "#fff3d1");
+    label(ctx, "小镇别慌", 92, 49, 31, INK, "left", 900);
+    label(ctx, "美少女消消乐", 94, 77, 13, MUTED, "left", 600);
+    panel(ctx, 318, 35, 202, 46, "#fffafd", "#eadce9", 23);
+    symbol(ctx, 4, 345, 57, 20, "#ef8db1");
+    panel(ctx, 367, 50, 92, 13, "#f6e4ec", null, 6);
+    if (s.hp) panel(ctx, 367, 50, 92 * s.hp / 100, 13, "#ef96b4", null, 6);
+    label(ctx, s.hp, 484, 57, 18, "#c27497", "center");
+    button(ctx, BUTTONS.levels, `第 ${String(s.level).padStart(2, "0")} 关`);
+    panel(ctx, 918, 32, 169, 52, "#fff8e9", "#eddcc3", 18);
+    label(ctx, "剩余步数", 937, 58, 14, "#a89167");
+    label(ctx, s.moves, 1058, 58, 28, s.moves <= 5 ? "#d66b87" : "#9d7850", "center", 900);
+    button(ctx, BUTTONS.pause, s.phase === "paused" ? "▶" : "Ⅱ");
+    button(ctx, BUTTONS.restart, "↻");
+  }
+  battle(s) {
+    const ctx = this.ctx, box = { x: 34, y: 119, w: 539, h: 329 };
+    panel(ctx, box.x, box.y + 5, box.w, box.h, "#dfd0e7", null, 26);
+    ctx.save(); round(ctx, box.x, box.y, box.w, box.h, 26); ctx.clip();
+    const bg = this.assets?.get("background");
+    if (bg) ctx.drawImage(bg, 0, 0, bg.width, bg.height * 0.7, box.x, box.y, box.w, box.h);
+    else { ctx.fillStyle = "#d7eadc"; ctx.fillRect(box.x, box.y, box.w, box.h); }
+    ctx.fillStyle = "rgba(255,247,239,.33)"; ctx.fillRect(box.x, box.y, box.w, box.h);
+    ctx.fillStyle = "rgba(241,233,209,.55)"; ctx.beginPath(); ctx.ellipse(295, 365, 275, 44, 0, 0, TAU); ctx.fill();
+    const a = s.animation, age = a?.age ?? 99, attack = a?.damage > 0 && age < 0.36;
+    const hero = { id: "u1", radius: 45, hp: s.hp, maxHp: 100, action: attack ? "attack" : a?.enemyDamage && age > 0.42 && age < 0.6 ? "hit" : null,
+      actionTtl: attack ? (1 - age / 0.36) * 0.32 : 0.1, formColors: [], elements: [] };
+    if (this.assets?.groupReady("ranger")) this.drawRangerSkeletal(hero, { x: 165, y: 312 }, null);
+    else { symbol(ctx, s.activeHero, 164, 306, 75, COLORS[s.activeHero].dark); }
+    const foe = s.foes[Math.min(s.foeIndex, 2)];
+    const hit = a?.damage && age > 0.16 && age < 0.45;
+    const enemy = { id: "e2", radius: 36 + foe.kind * 4, hp: foe.hp, maxHp: foe.maxHp,
+      action: hit ? "hit" : a?.enemyDamage && age > 0.4 && age < 0.65 ? "attack" : null, actionTtl: hit ? (0.45 - age) * 0.6 : 0.2 };
+    if (s.foeIndex < 3) {
+      ctx.save();
+      if (foe.kind === 1 && "filter" in ctx) ctx.filter = "hue-rotate(45deg)";
+      if (foe.kind === 2 && "filter" in ctx) ctx.filter = "hue-rotate(295deg)";
+      if (this.assets?.groupReady("slime")) this.drawSlimeSkeletal(enemy, { x: 429, y: 333 });
+      else { ctx.fillStyle = "#ae91db"; ctx.beginPath(); ctx.ellipse(429, 333, 44, 34, 0, 0, TAU); ctx.fill(); label(ctx, "•ᴗ•", 429, 332, 24, "#fff", "center"); }
+      ctx.restore();
+      panel(ctx, 354, 204, 151, 39, "#fffaf7", "#edd8da", 16);
+      label(ctx, foe.name, 429, 223, 16, "#786077", "center");
+      panel(ctx, 359, 253, 142, 11, "#ede1eb", null, 5);
+      panel(ctx, 359, 253, Math.max(1, 142 * foe.hp / foe.maxHp), 11, "#c98dc9", null, 5);
+      panel(ctx, 418, 373, 62, 31, "#fff5ef", "#f0d6d2", 13);
+      label(ctx, `⚡ ${foe.countdown}`, 449, 389, 17, "#b77c93", "center");
+    }
+    panel(ctx, 51, 136, 158, 31, "rgba(255,255,255,.9)", null, 15);
+    label(ctx, ["花间小路", "午后花园", "甜梦广场"][Math.floor((s.level - 1) / 4)], 130, 152, 14, "#7c7770", "center");
+    for (let i = 0; i < 3; i++) {
+      panel(ctx, 465 + i * 28, 140, 18, 18, i < s.foeIndex ? "#f3bc79" : "rgba(255,255,255,.75)", null, 9);
+      if (i < s.foeIndex) label(ctx, "✓", 474 + i * 28, 149, 12, "#fff", "center");
+    }
+    if (attack) {
+      const p = clamp(age / 0.28, 0, 1), x = 215 + 180 * p, y = 293 - Math.sin(p * Math.PI) * 32;
+      ctx.strokeStyle = COLORS[s.activeHero].color; ctx.lineWidth = 7; ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(x - 45, y + 6); ctx.lineTo(x, y); ctx.stroke();
+      star(ctx, x, y, 15, COLORS[s.activeHero].light);
+    }
+    if (a?.damage && age < 1) label(ctx, `−${a.damage}`, 428, 192 - age * 24, 29, "#a85b99", "center", 900);
+    if (a?.enemyDamage && age > 0.42 && age < 1.2) label(ctx, `−${a.enemyDamage}`, 165, 205 - age * 20, 25, "#d16480", "center", 900);
+    if (a?.healed && age < 1.2) label(ctx, `+${a.healed}`, 205, 243 - age * 25, 25, "#40967c", "center", 900);
+    if (a?.skills.length && age < 1.1) {
+      const heroId = a.skills[0];
+      panel(ctx, 210, 173, 108, 40, COLORS[heroId].light, "#fff", 20);
+      label(ctx, COLORS[heroId].skill, 264, 194, 23, COLORS[heroId].dark, "center", 900);
+    }
+    label(ctx, "消除充能 · 满格释放", 303, 428, 13, "#796d75", "center", 600);
+    ctx.restore();
+    round(ctx, box.x, box.y, box.w, box.h, 26); ctx.strokeStyle = "#fffafc"; ctx.lineWidth = 3; ctx.stroke();
+  }
+  portrait(type, x, y, w, h) {
+    const ctx = this.ctx, image = this.assets?.get("portraits");
+    ctx.fillStyle = COLORS[type].light; ctx.fillRect(x, y, w, h);
+    if (image) {
+      const sw = image.width / 2, sh = image.height / 2, sx = (type % 2) * sw, sy = Math.floor(type / 2) * sh;
+      ctx.drawImage(image, sx, sy, sw, sh, x, y, w, h);
+    } else symbol(ctx, type, x + w / 2, y + h / 2, 40, COLORS[type].color);
+  }
+  team(s) {
+    const ctx = this.ctx;
+    for (let i = 0; i < 4; i++) {
+      const x = 38 + i * 135, y = 474, w = 126, h = 166, active = s.heroActions[i] > 0;
+      panel(ctx, x, y + 4, w, h, "#dfd1e7", null, 18);
+      ctx.save(); round(ctx, x, y, w, h, 18); ctx.clip();
+      this.portrait(i, x, y, w, 126);
+      ctx.fillStyle = "#fffafd"; ctx.fillRect(x, y + 119, w, 48);
+      label(ctx, COLORS[i].name, x + 16, y + 139, 17, INK);
+      symbol(ctx, i, x + w - 19, y + 138, 18, COLORS[i].color);
+      ctx.fillStyle = "#ece5ef"; ctx.fillRect(x + 10, y + 154, w - 20, 5);
+      ctx.fillStyle = COLORS[i].color; ctx.fillRect(x + 10, y + 154, (w - 20) * s.charges[i] / 10, 5);
+      ctx.restore();
+      round(ctx, x, y, w, h, 18); ctx.strokeStyle = active ? COLORS[i].dark : "#fff"; ctx.lineWidth = active ? 4 : 3; ctx.stroke();
+      if (active) star(ctx, x + w - 12, y + 8, 11 + Math.sin(this.time * 12) * 3, "#ffe49b");
+    }
+    star(ctx, 250, 674, 9, "#e1b779");
+    label(ctx, `${s.score.toLocaleString()} 分`, 272, 674, 17, "#a08aa6");
+  }
+  drawTile(tile, x, y, scale = 1, hinted = false) {
+    const ctx = this.ctx, def = COLORS[tile.type], size = 66;
+    ctx.save(); ctx.translate(x, y); ctx.scale(scale, scale);
+    panel(ctx, -size / 2, -size / 2 + 5, size, size, def.dark, null, 16);
+    panel(ctx, -size / 2, -size / 2, size, size, def.color, hinted ? "#fffef0" : def.light, 16);
+    ctx.strokeStyle = "rgba(255,255,255,.42)"; ctx.lineWidth = 3; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(-21, -23); ctx.lineTo(-8, -23); ctx.stroke();
+    if (!tile.special) symbol(ctx, tile.type, 0, 0, 34);
+    else if (tile.special === "line") {
+      symbol(ctx, tile.type, 0, 0, 24);
+      ctx.strokeStyle = "#fff"; ctx.lineWidth = 3;
+      for (const yy of [-14, 14]) { ctx.beginPath(); ctx.moveTo(-25, yy); ctx.lineTo(25, yy); ctx.stroke(); }
+      label(ctx, "↔", 0, 1, 34, "#fff", "center", 900);
+    } else if (tile.special === "bomb") {
+      ctx.fillStyle = "#fffaf2"; ctx.beginPath(); ctx.arc(0, 3, 18, 0, TAU); ctx.fill();
+      ctx.strokeStyle = "#fffaf2"; ctx.beginPath(); ctx.moveTo(5, -13); ctx.quadraticCurveTo(6, -26, 15, -23); ctx.stroke();
+      star(ctx, 19, -22, 6, "#ffe08e"); symbol(ctx, tile.type, 0, 4, 20, def.dark);
+    } else {
+      for (let i = 0; i < 5; i++) { ctx.fillStyle = COLORS[i].light; ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, 23, i * TAU / 5, (i + 1) * TAU / 5); ctx.closePath(); ctx.fill(); }
+      star(ctx, 0, 0, 16, "#fff");
+    }
+    if (hinted) { round(ctx, -35, -35, 70, 70, 18); ctx.strokeStyle = "#fffefa"; ctx.lineWidth = 3; ctx.stroke(); }
+    ctx.restore();
+  }
+  board(s) {
+    const ctx = this.ctx;
+    panel(ctx, 598, 119 + 5, 602, 513, "#d7cce4", null, 28);
+    panel(ctx, 598, 119, 602, 513, "#fffafd", "#e3d7ec", 28);
+    panel(ctx, GRID.x - 8, GRID.y - 10, GRID.cols * GRID.cell + 16, GRID.rows * GRID.cell + 10, "#e8e0f2", null, 19);
+    let hint = [];
+    if (s.idle > 5 || (s.movesUsed === 0 && s.level === 1)) hint = [...possibleMoves(s.board)].sort((a, b) => b.length - a.length)[0] || [];
+    ctx.save(); round(ctx, GRID.x - 5, GRID.y - 9, GRID.cols * GRID.cell + 10, GRID.rows * GRID.cell + 13, 17); ctx.clip();
+    const falling = s.animation ? clamp(s.animation.age / 0.45, 0, 1) : 1;
+    const ease = 1 - (1 - falling) ** 3;
+    s.board.forEach((tile, index) => {
+      const { x, y } = tileCenter(index), row = Math.floor(index / GRID.cols);
+      const offset = (tile.fromRow - row) * GRID.cell * (1 - ease);
+      const isHint = hint.includes(index), scale = isHint ? 1 + Math.sin(this.time * 4) * 0.025 : 1;
+      const shake = s.reject === index && s.rejectTtl > 0 ? Math.sin(this.time * 90) * 4 : 0;
+      this.drawTile(tile, x + shake, y + offset, scale, isHint);
+      if (s.hammerArmed) { ctx.strokeStyle = "rgba(255,255,255,.8)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, 22, 0, TAU); ctx.stroke(); }
+    });
+    ctx.restore();
+  }
+  effects(s) {
+    const ctx = this.ctx, a = s.animation;
+    if (!a || a.age > 0.7 || !a.removed.length) return;
+    const p = a.age / 0.7;
+    for (const tile of a.removed) {
+      const center = tileCenter(tile.index);
+      for (let i = 0; i < 4; i++) {
+        const angle = i * Math.PI / 2 + tile.index, distance = 12 + p * 45;
+        ctx.globalAlpha = 1 - p;
+        star(ctx, center.x + Math.cos(angle) * distance, center.y + Math.sin(angle) * distance + p * p * 30, 6 * (1 - p) + 2, COLORS[tile.type].light);
+      }
+    }
+    ctx.globalAlpha = 1;
+    if (a.count >= 4) {
+      ctx.save(); ctx.globalAlpha = Math.min(1, (1 - p) * 3);
+      const title = a.special === "rainbow" ? "彩虹！" : a.special === "bomb" ? "大爆发！" : a.count >= 7 ? "漂亮！" : `${a.count} 连消`;
+      panel(ctx, 822, 111 - p * 18, 158, 43, "#fff4d9", "#edc892", 21);
+      label(ctx, title, 901, 133 - p * 18, 23, "#bd8d54", "center", 900);
+      ctx.restore();
+    }
+  }
+  footer(s) {
+    const ctx = this.ctx;
+    label(ctx, s.hammerArmed ? "点一下，敲碎它" : "2 连起消", 639, 668, 16, "#a18aac");
+    ctx.globalAlpha = s.shuffles > 0 ? 1 : 0.45;
+    button(ctx, BUTTONS.shuffle, `↝  重排 ${s.shuffles}`);
+    ctx.globalAlpha = s.hammers > 0 ? 1 : 0.45;
+    button(ctx, BUTTONS.hammer, `✦  小锤 ${s.hammers}`, s.hammerArmed ? "#e4d5f6" : "#fffafd");
+    ctx.globalAlpha = 1;
+    if (s.toastTtl > 0) {
+      panel(ctx, 526, 648, 226, 43, "#79628e", null, 20);
+      label(ctx, s.toast, 639, 670, 17, "#fff", "center");
+    }
+  }
+  overlay(s) {
+    if (s.phase === "playing" || (["victory", "defeat"].includes(s.phase) && s.lock > 0)) return;
+    const ctx = this.ctx;
+    ctx.fillStyle = "rgba(74,51,95,.35)"; ctx.fillRect(0, 0, 1280, 720);
+    if (s.phase === "levels") {
+      panel(ctx, 334, 135, 626, 384, "#fffafd", "#fff", 30);
+      label(ctx, "花间旅途", 641, 195, 29, INK, "center", 900);
+      button(ctx, BUTTONS.close, "×");
+      for (let i = 0; i < LEVEL_COUNT; i++) {
+        const r = levelRect(i), locked = i + 1 > s.unlocked;
+        panel(ctx, r.x, r.y, r.w, r.h, locked ? "#eee8f2" : i + 1 === s.level ? "#e4d6f2" : "#fff2dd", null, 18);
+        label(ctx, locked ? "·" : i + 1, r.x + r.w / 2, r.y + 36, 27, locked ? "#c4b8cd" : INK, "center", 900);
+        for (let j = 0; j < 3; j++) star(ctx, r.x + 27 + j * 22, r.y + 73, 8, j < s.bestStars[i] ? "#ecc47b" : "#d8cddd");
+      }
+      return;
+    }
+    panel(ctx, 414, 202, 452, 324, "#fffafd", "#fff", 32);
+    const won = s.phase === "victory", paused = s.phase === "paused", all = won && s.level === LEVEL_COUNT;
+    label(ctx, paused ? "休息一下" : all ? "花间旅途完成！" : won ? "漂亮，过关！" : "差一点点", 640, 269, 32, INK, "center", 900);
+    if (won) for (let i = 0; i < 3; i++) star(ctx, 560 + i * 80, 346 - (i === 1 ? 9 : 0), i === 1 ? 35 : 28, i < s.stars ? "#efc575" : "#e4dce8");
+    else { symbol(ctx, paused ? 3 : 4, 640, 346, 66, paused ? "#99caae" : "#ecafc7"); }
+    label(ctx, won ? `${s.score.toLocaleString()} 分` : paused ? "你的进度已保留" : s.hp <= 0 ? "多消爱心，及时恢复" : "试试积攒大块消除", 640, 402, 17, MUTED, "center", 600);
+    button(ctx, BUTTONS.primary, paused ? "继续" : all ? "再玩一次" : won ? "下一关  →" : "再试一次", "#ae92d1", "#fff");
+  }
+}
+
+Object.assign(exports, { PuzzleRenderer });
+});
+
+__define("puzzle-runtime", function (exports, __require) {
+const { PuzzleGame } = __require("puzzle-core");
+const { PuzzleRenderer } = __require("puzzle-renderer");
+const { AssetBank } = __require("skeletal-assets");
+
+const SAVE_KEY = "xiaozhen-biehuang-puzzle-v1";
+function startPuzzle(platform) {
+  const game = new PuzzleGame();
+  const assets = new AssetBank(platform, "assets/generated");
+  const renderer = new PuzzleRenderer(platform.context, assets);
+  const saved = platform.load(SAVE_KEY);
+  if (saved) game.restore(saved);
+  void assets.preload();
+  const announce = () => platform.announce?.(game.state);
+  const save = () => { platform.save(SAVE_KEY, game.serialize()); announce(); };
+  platform.setPointerHandler(({ x, y }) => { if (game.handleTap(x, y)) save(); });
+  platform.setKeyHandler(({ key, originalEvent }) => {
+    if ([" ", "p", "escape"].includes(key)) {
+      originalEvent.preventDefault();
+      if (game.state.phase === "levels") game.state.phase = game.state.previousPhase;
+      else game.togglePause();
+    } else if (key === "r") game.startLevel(game.state.level);
+    else if (key === "enter" && ["paused", "victory", "defeat"].includes(game.state.phase)) {
+      game.handleTap(640, 465);
+    } else return;
+    save();
+  });
+  platform.setVisibilityHandler(() => { game.pauseForVisibility(); save(); });
+  let previous = platform.now();
+  function frame(timestamp) {
+    const dt = Math.min(0.1, Math.max(0, (timestamp - previous) / 1000));
+    previous = timestamp;
+    game.update(dt);
+    renderer.draw(game.state, dt);
+    platform.requestFrame(frame);
+  }
+  announce(); renderer.draw(game.state, 0); platform.requestFrame(frame);
+  return { game, assets, renderer };
+}
+
+Object.assign(exports, { SAVE_KEY, startPuzzle });
+});
+
 __define("platform-wechat", function (exports, __require) {
 /**
  * WeChat Mini Game implementation of the same small platform surface used by
@@ -2197,68 +2826,12 @@ Object.assign(exports, { WechatPlatform });
 });
 
 __define("main-wechat", function (exports, __require) {
-const { TowerDefenseGame, LOGICAL_HEIGHT, LOGICAL_WIDTH } = __require("core");
+const { LOGICAL_HEIGHT, LOGICAL_WIDTH } = __require("puzzle-core");
 const { WechatPlatform } = __require("platform-wechat");
-const { CanvasRenderer } = __require("renderer");
-const { AssetBank } = __require("skeletal-assets");
+const { startPuzzle } = __require("puzzle-runtime");
 
-const SAVE_KEY = "xiaozhen-biehuang-turn-defense-v3";
-const FIXED_STEP = 1 / 60;
-
-const canvas = wx.createCanvas();
-const platform = new WechatPlatform(canvas, LOGICAL_WIDTH, LOGICAL_HEIGHT);
-const game = new TowerDefenseGame();
-const assets = new AssetBank(platform, "assets/generated");
-const renderer = new CanvasRenderer(platform.context, assets);
-void assets.preload();
-
-const saved = platform.load(SAVE_KEY);
-if (saved) game.restore(saved);
-
-function save() {
-  if (platform.save(SAVE_KEY, game.serialize())) game.flashSaved();
-}
-
-function handleAction(action) {
-  if (!action) return;
-  if (action.type === "save") save();
-  if (action.type === "restart") {
-    platform.remove(SAVE_KEY);
-    save();
-  }
-}
-
-platform.setPointerHandler(({ x, y }) => handleAction(game.handleTap(x, y)));
-platform.setVisibilityHandler(() => {
-  game.pauseForVisibility();
-  save();
-});
-
-let previous = platform.now();
-let accumulator = 0;
-let autosaveClock = 0;
-
-function frame(timestamp) {
-  const frameDelta = Math.min(0.1, Math.max(0, (timestamp - previous) / 1000));
-  previous = timestamp;
-  accumulator += frameDelta;
-
-  while (accumulator >= FIXED_STEP) {
-    game.update(FIXED_STEP);
-    accumulator -= FIXED_STEP;
-    autosaveClock += FIXED_STEP;
-    if (autosaveClock >= 10) {
-      autosaveClock = 0;
-      platform.save(SAVE_KEY, game.serialize());
-    }
-  }
-
-  renderer.draw(game.state, frameDelta);
-  platform.requestFrame(frame);
-}
-
-renderer.draw(game.state, 0);
-platform.requestFrame(frame);
+const platform = new WechatPlatform(wx.createCanvas(), LOGICAL_WIDTH, LOGICAL_HEIGHT);
+startPuzzle(platform);
 
 });
 

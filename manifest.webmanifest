@@ -1,13 +1,13 @@
 {
   "name": "小镇别慌",
   "short_name": "小镇别慌",
-  "description": "横屏五路回合制卡牌守镇试玩",
+  "description": "美少女消消乐，点击同色为伙伴充能",
   "start_url": "./",
   "scope": "./",
   "display": "fullscreen",
   "orientation": "landscape",
-  "background_color": "#10271f",
-  "theme_color": "#18382f",
+  "background_color": "#f4eff9",
+  "theme_color": "#f4eff9",
   "icons": [
     {
       "src": "./favicon.svg",

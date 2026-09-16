@@ -1,6 +1,6 @@
 # 二次元骨骼素材包
 
-这些素材由内置图片生成工具制作，并按运行时骨骼插槽拆分。正式运行只加载 `parts/` 中的透明 PNG，`atlas-anime-v2.png` 是可追溯的源图集，不会作为整张角色贴图使用。
+这些素材由内置图片生成工具制作。战斗角色加载 `parts/` 中的透明 PNG；`atlas-anime-v2.png` 是可追溯的骨骼源图集，不会作为整张战斗角色贴图使用。美少女消消乐另加载 `puzzle/heroine-portraits-v1.png` 作为静态头像卡面，生成提示词见 [puzzle/README.md](puzzle/README.md)。
 
 ## 文件
 

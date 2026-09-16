@@ -44,6 +44,7 @@ export class AssetBank {
   entries() {
     return [
       ["background", "battlefield-anime-v2.png"],
+      ["portraits", "puzzle/heroine-portraits-v1.png"],
       ...RANGER_PARTS.map((part) => [`ranger:${part}`, `ranger/parts/${part}.png`]),
       ...SLIME_PARTS.map((part) => [`slime:${part}`, `slime/parts/${part}.png`]),
     ];
