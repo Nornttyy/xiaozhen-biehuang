@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#f8eee5" />
+    <meta name="color-scheme" content="light" />
+    <title>珊瑚 · 咖啡时间</title>
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./rig-preview.css" />
+  </head>
+  <body>
+    <main class="preview-shell">
+      <header class="preview-header">
+        <a class="back-link" href="./" aria-label="返回主页">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6M8 12h12" /></svg>
+          <span>返回</span>
+        </a>
+        <div class="heading"><h1>珊瑚</h1><span>咖啡时间</span></div>
+        <span class="preview-tag">角色预览</span>
+      </header>
+
+      <div class="preview-layout">
+        <section class="scene" aria-label="角色动作预览">
+          <canvas id="rig-canvas" width="1000" height="750" role="img" aria-label="珊瑚的二维角色动作与表情预览">你的浏览器不支持 Canvas。</canvas>
+          <div class="scene-caption" aria-hidden="true"><span class="caption-dot"></span><span id="pose-caption">待机 · 微笑</span></div>
+          <div id="load-overlay" class="load-overlay">
+            <span class="load-flower" aria-hidden="true">✿</span>
+            <p id="load-status" role="status" aria-live="polite">珊瑚准备中…</p>
+            <button id="retry-load" type="button" hidden>重新加载</button>
+          </div>
+        </section>
+
+        <fieldset id="preview-controls" class="control-panel" disabled aria-label="角色预览控制">
+          <div class="choice-section">
+            <h2 id="action-label">动作</h2>
+            <div id="action-options" class="choice-grid" role="group" aria-labelledby="action-label"></div>
+          </div>
+          <div class="choice-section">
+            <h2 id="expression-label">表情</h2>
+            <div id="expression-options" class="choice-grid expressions" role="group" aria-labelledby="expression-label"></div>
+          </div>
+          <div class="playback-controls">
+            <button id="pause-button" class="pause-button" type="button" aria-label="暂停动画" aria-pressed="false"><span id="pause-icon" aria-hidden="true">Ⅱ</span><span id="pause-label">暂停</span></button>
+            <div class="view-options" role="group" aria-label="部件显示">
+              <button id="bones-button" type="button" aria-pressed="false">骨骼</button>
+              <button id="explode-button" type="button" aria-pressed="false">拆分</button>
+            </div>
+          </div>
+          <div class="speed-control">
+            <div class="speed-label"><label for="speed-slider">速度</label><output id="speed-value" for="speed-slider">1×</output></div>
+            <input id="speed-slider" type="range" min="0.5" max="1.5" step="0.1" value="1" aria-label="动画播放速度" aria-valuetext="1 倍速" />
+          </div>
+        </fieldset>
+      </div>
+      <p id="preview-status" class="sr-only" role="status" aria-live="polite"></p>
+      <noscript><p class="noscript-message">启用 JavaScript 后即可预览角色。</p></noscript>
+    </main>
+    <script type="module" src="./src/rig-preview.js"></script>
+  </body>
+</html>

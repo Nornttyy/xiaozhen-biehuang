@@ -1,0 +1,115 @@
+{
+  "schema": "coral-separated-sprite-rig",
+  "version": "0.1.0",
+  "status": "extraction_complete_import_template_geometry_unvalidated",
+  "usage": {
+    "role": "import_template",
+    "webPreviewImplementation": "../../../../src/cafe-rig.js",
+    "notice": "The web preview uses its own pixel transforms in src/cafe-rig.js. It does not consume this template's normalized pivots, attachments or estimated sizes. Preview checks do not validate this import template's geometry."
+  },
+  "identity": {
+    "id": "coral-v6",
+    "role": "cafe_staff",
+    "agePresentation": "adult",
+    "faceDirection": "front",
+    "faceStyle": "Adult oval face, warm almond-shaped eyes, subtle blush and a natural friendly smile."
+  },
+  "validation": {
+    "extractionVerified": true,
+    "extractionScript": "../../../../scripts/export-cafe-parts.mjs",
+    "extractionVerificationScope": "All 28 expected part files exist and their PNG signatures and IHDR dimensions were read. Every file has positive dimensions, 8-bit channels and PNG color type 6 (RGBA). This verifies export presence and header metadata, not pixel-level cleanup or joint alignment.",
+    "pngDimensionsVerified": true,
+    "pngHeaderAudit": { "partCount": 28, "widthRangePixels": [86, 364], "heightRangePixels": [18, 376], "bitDepth": 8, "colorType": 6 },
+    "alphaCleanupVerified": false,
+    "anatomyAlignmentVerified": false,
+    "clothingAnchorsVerified": false,
+    "expressionsVerified": false,
+    "animationVerified": false,
+    "notice": "Extraction is complete. All normalized pivots, attachments, estimated sizes and draw orders remain initial estimates for this import template. Tune against the actual extracted PNG canvases before use; this file does not establish a validated pose or animation.",
+    "sourceLimitations": [
+      "Generated color fringes remain along some extracted edges; alpha presence is not proof of fully cleaned transparency.",
+      "The generated source knees contain outlined caps, which may remain visible at assembled knee joints."
+    ]
+  },
+  "coordinates": {
+    "local": "Normalized [0,1] coordinates in each referenced part's full PNG canvas; origin at top-left, +x right, +y down. Transparent padding counts toward the canvas dimensions.",
+    "pivot": "pivot is measured in this node's local canvas. For a virtual node it is measured in that node's estimated frame.",
+    "attachment": "attach is measured in the parent node's local canvas or virtual frame. Match this node's pivot to that parent attachment before applying local rotation.",
+    "size": "size is estimated width and height as fractions of the reference stage. It is a placement hint, not a measured image size or a validated instruction to stretch the artwork.",
+    "rotation": "Positive degrees rotate clockwise about the local pivot. Parent transforms propagate to descendants.",
+    "sides": "left and right mean screen-left and screen-right in the neutral front view, not the character's anatomical left and right.",
+    "stage": { "width": 768, "height": 1024 },
+    "rootPlacement": "pelvis.stagePosition is normalized to the reference stage."
+  },
+  "atlases": [
+    {
+      "path": "body-atlas-v6.png",
+      "columns": 4,
+      "rows": 4,
+      "cellOrder": ["torso", "skirt_apron", "arm_left_upper", "arm_right_upper", "arm_left_lower", "arm_right_lower", "hand_left", "hand_right", "leg_left_upper", "leg_right_upper", "leg_left_lower", "leg_right_lower", "shoe_left", "shoe_right", "tray", "cup"]
+    },
+    {
+      "path": "head-atlas-v6.png",
+      "columns": 4,
+      "rows": 3,
+      "cellOrder": ["face_base", "hair_back", "hair_side_left", "hair_side_right", "hair_bangs", "eyes_open", "eyes_closed", "brows_neutral", "brows_happy", "mouth_smile", "mouth_open", "mouth_neutral"]
+    }
+  ],
+  "virtualNodes": {
+    "pelvis": { "parent": null, "pivot": [0.5, 0.5], "stagePosition": [0.5, 0.55], "size": [0.26, 0.12], "rotationDegrees": 0 },
+    "head": { "parent": "torso", "pivot": [0.5, 0.9], "attach": [0.5, 0.06], "size": [0.23, 0.22], "rotationDegrees": 0 }
+  },
+  "parts": {
+    "torso": { "path": "parts/torso.png", "parent": "pelvis", "pivot": [0.5, 0.94], "attach": [0.5, 0.25], "size": [0.27, 0.26], "drawOrder": 40 },
+    "skirt_apron": { "path": "parts/skirt_apron.png", "parent": "pelvis", "pivot": [0.5, 0.1], "attach": [0.5, 0.22], "size": [0.31, 0.17], "drawOrder": 60 },
+    "arm_left_upper": { "path": "parts/arm_left_upper.png", "parent": "torso", "pivot": [0.5, 0.15], "attach": [0.14, 0.17], "size": [0.09, 0.135], "drawOrder": 70 },
+    "arm_right_upper": { "path": "parts/arm_right_upper.png", "parent": "torso", "pivot": [0.5, 0.15], "attach": [0.86, 0.17], "size": [0.09, 0.135], "drawOrder": 71 },
+    "arm_left_lower": { "path": "parts/arm_left_lower.png", "parent": "arm_left_upper", "pivot": [0.5, 0.14], "attach": [0.5, 0.9], "size": [0.078, 0.132], "drawOrder": 80 },
+    "arm_right_lower": { "path": "parts/arm_right_lower.png", "parent": "arm_right_upper", "pivot": [0.5, 0.14], "attach": [0.5, 0.9], "size": [0.078, 0.132], "drawOrder": 81 },
+    "hand_left": { "path": "parts/hand_left.png", "parent": "arm_left_lower", "pivot": [0.5, 0.15], "attach": [0.5, 0.91], "size": [0.055, 0.065], "drawOrder": 90 },
+    "hand_right": { "path": "parts/hand_right.png", "parent": "arm_right_lower", "pivot": [0.5, 0.15], "attach": [0.5, 0.91], "size": [0.055, 0.065], "drawOrder": 91 },
+    "leg_left_upper": { "path": "parts/leg_left_upper.png", "parent": "pelvis", "pivot": [0.5, 0.1], "attach": [0.32, 0.58], "size": [0.085, 0.145], "drawOrder": 20 },
+    "leg_right_upper": { "path": "parts/leg_right_upper.png", "parent": "pelvis", "pivot": [0.5, 0.1], "attach": [0.68, 0.58], "size": [0.085, 0.145], "drawOrder": 21 },
+    "leg_left_lower": { "path": "parts/leg_left_lower.png", "parent": "leg_left_upper", "pivot": [0.5, 0.09], "attach": [0.5, 0.91], "size": [0.072, 0.145], "drawOrder": 30 },
+    "leg_right_lower": { "path": "parts/leg_right_lower.png", "parent": "leg_right_upper", "pivot": [0.5, 0.09], "attach": [0.5, 0.91], "size": [0.072, 0.145], "drawOrder": 31 },
+    "shoe_left": { "path": "parts/shoe_left.png", "parent": "leg_left_lower", "pivot": [0.5, 0.22], "attach": [0.5, 0.94], "size": [0.105, 0.057], "drawOrder": 32 },
+    "shoe_right": { "path": "parts/shoe_right.png", "parent": "leg_right_lower", "pivot": [0.5, 0.22], "attach": [0.5, 0.94], "size": [0.105, 0.057], "drawOrder": 33 },
+    "tray": { "path": "parts/tray.png", "parent": "hand_left", "pivot": [0.8, 0.75], "attach": [0.5, 0.45], "size": [0.22, 0.046], "drawOrder": 95, "optionalProp": true, "defaultVisible": false },
+    "cup": { "path": "parts/cup.png", "parent": "tray", "pivot": [0.5, 0.92], "attach": [0.32, 0.15], "size": [0.055, 0.06], "drawOrder": 96, "optionalProp": true, "defaultVisible": false },
+    "face_base": { "path": "parts/face_base.png", "parent": "head", "pivot": [0.5, 0.5], "attach": [0.5, 0.51], "size": [0.205, 0.2], "drawOrder": 110, "constraint": "Blank face: no baked-in eyes, eyebrows or mouth; subtle blush is allowed." },
+    "hair_back": { "path": "parts/hair_back.png", "parent": "head", "pivot": [0.5, 0.38], "attach": [0.5, 0.44], "size": [0.31, 0.3], "drawOrder": 10 },
+    "hair_side_left": { "path": "parts/hair_side_left.png", "parent": "head", "pivot": [0.5, 0.08], "attach": [0.075, 0.13], "size": [0.067, 0.23], "drawOrder": 130 },
+    "hair_side_right": { "path": "parts/hair_side_right.png", "parent": "head", "pivot": [0.5, 0.08], "attach": [0.925, 0.13], "size": [0.067, 0.23], "drawOrder": 131 },
+    "hair_bangs": { "path": "parts/hair_bangs.png", "parent": "head", "pivot": [0.5, 0.08], "attach": [0.5, 0.02], "size": [0.22, 0.087], "drawOrder": 140 },
+    "eyes_open": { "path": "parts/eyes_open.png", "parent": "face_base", "pivot": [0.5, 0.5], "attach": [0.5, 0.47], "size": [0.15, 0.035], "drawOrder": 120, "expressionSlot": "eyes" },
+    "eyes_closed": { "path": "parts/eyes_closed.png", "parent": "face_base", "pivot": [0.5, 0.5], "attach": [0.5, 0.47], "size": [0.15, 0.035], "drawOrder": 120, "expressionSlot": "eyes" },
+    "brows_neutral": { "path": "parts/brows_neutral.png", "parent": "face_base", "pivot": [0.5, 0.5], "attach": [0.5, 0.34], "size": [0.145, 0.03], "drawOrder": 121, "expressionSlot": "brows" },
+    "brows_happy": { "path": "parts/brows_happy.png", "parent": "face_base", "pivot": [0.5, 0.5], "attach": [0.5, 0.34], "size": [0.145, 0.03], "drawOrder": 121, "expressionSlot": "brows" },
+    "mouth_smile": { "path": "parts/mouth_smile.png", "parent": "face_base", "pivot": [0.5, 0.5], "attach": [0.5, 0.74], "size": [0.045, 0.025], "drawOrder": 122, "expressionSlot": "mouth" },
+    "mouth_open": { "path": "parts/mouth_open.png", "parent": "face_base", "pivot": [0.5, 0.5], "attach": [0.5, 0.74], "size": [0.045, 0.025], "drawOrder": 122, "expressionSlot": "mouth" },
+    "mouth_neutral": { "path": "parts/mouth_neutral.png", "parent": "face_base", "pivot": [0.5, 0.5], "attach": [0.5, 0.74], "size": [0.045, 0.025], "drawOrder": 122, "expressionSlot": "mouth" }
+  },
+  "expressionSlots": {
+    "eyes": { "variants": ["eyes_open", "eyes_closed"], "default": "eyes_open" },
+    "brows": { "variants": ["brows_neutral", "brows_happy"], "default": "brows_neutral" },
+    "mouth": { "variants": ["mouth_smile", "mouth_open", "mouth_neutral"], "default": "mouth_neutral" }
+  },
+  "expressions": {
+    "neutral": { "eyes": "eyes_open", "brows": "brows_neutral", "mouth": "mouth_neutral" },
+    "happy": { "eyes": "eyes_open", "brows": "brows_happy", "mouth": "mouth_smile" },
+    "blink": { "eyes": "eyes_closed", "brows": "brows_neutral", "mouth": "mouth_smile" },
+    "talking": { "eyes": "eyes_open", "brows": "brows_neutral", "mouth": "mouth_open" }
+  },
+  "assemblyRules": [
+    "Load each of the 28 parts from its own PNG. Atlas cells are provenance, not replacement runtime layers.",
+    "Render exactly one selected variant per expression slot; eyes and brows assets each contain the paired features.",
+    "All parts default to visible except inactive expression variants and optional props. Local rotation defaults to zero.",
+    "Keep torso clothing with torso, each sleeve with its upper arm, and skirt/apron with pelvis. Tune overlapping joint coverage without merging limb segments.",
+    "Compute inherited transforms independently of draw order, then draw visible parts in ascending drawOrder. Facial variants share order intentionally because only one variant is active per slot.",
+    "head is a virtual frame: face, back hair, both side hair parts and bangs inherit it. Face features inherit face_base and therefore follow head movement.",
+    "Calves inherit their own thigh; shoes inherit their own calf. Forearms inherit their own upper arm; hands inherit their own forearm.",
+    "tray is anchored to hand_left and cup to tray. Enable props together only after tuning a supported carrying pose; hide descendants when a prop parent is hidden.",
+    "Do not use an atlas cutout containing another listed body segment or baked-in face features as a substitute for a genuinely isolated part.",
+    "Before marking geometry or visual validation flags true, visually inspect actual transparency, part completeness, all joints, clothing coverage and all four expressions using this template's transforms. File existence and PNG-header checks establish extraction status only. No animation or pose has been validated by this import template."
+  ]
+}

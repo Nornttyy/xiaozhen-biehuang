@@ -2,6 +2,18 @@
 
 [在线试玩](https://nornttyy.github.io/xiaozhen-biehuang/)
 
+## 咖啡店角色分层预览
+
+[独立角色预览](https://nornttyy.github.io/xiaozhen-biehuang/rig-preview.html) 不替换当前消除游戏。
+
+粉发成年店员现已导出 28 张独立透明 PNG：手臂为上臂／前臂／手掌，腿为大腿／小腿／鞋，头部分为脸底／后发／侧发／刘海／眼／眉／嘴。预览可切换待机、招手、行走、端盘，以及自然、微笑、眨眼、说话，并检查骨骼或拆分视图。
+
+素材由内置图片生成制作，全部保持二次元平涂；`scripts/export-cafe-parts.mjs` 仅按实测边界导出独立图片，不修改绘画。源图仍有少量彩边和关节封口描线，属于待精修项。这是动作和分层验证页，尚未实现咖啡店经营循环或替换正式游戏角色。
+
+- [素材、骨骼导入模板与状态](assets/generated/cafe/coral-v6/README.md)
+- [完整图片生成提示词](assets/generated/cafe/coral-v6/PROMPTS.md)
+- `src/cafe-rig.js` 使用独立的网页预览参数，不把 `rig.json` 的估算参数冒充已校准数据。
+
 横屏 2D 点消游戏：7×6 棋盘、四位美少女伙伴、10 个短关卡。点击两个以上正交相连的同色方块即可消除、掉落补位并发动攻击；思考时战斗暂停。
 
 ## 玩法
